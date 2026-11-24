@@ -1,0 +1,44 @@
+// @description Resets requests for the proxy.php of Nextcloud's built-in Collabora server (the richdocumentscode app).
+// @patches Collabora Online built-in CODE server (richdocumentscode) before 26.4.303, in Nextcloud
+// @cve CVE-2026-110447
+// @severity critical
+// @tags http, nextcloud, collabora, php, rce, command-injection
+// @knob port  The port to guard. Streams are reassembled only on 80; see below.
+//
+// The app's proxy.php starts the bundled CODE server when it is not running,
+// and a request can make it run an operating-system command as the web
+// server user instead. That window opens on every container restart, upgrade
+// and crash. The vendor's advice is to upgrade or remove the app, and says
+// that disabling it is not enough: the file is still served. This is the
+// removal, at the network:
+//
+//   nextcloud_code_proxy  a request whose path holds `richdocumentscode` and,
+//                         after it, `proxy.php`
+//
+// That takes in apps/, custom_apps/ and the arm64 build of the app. Checked
+// against Apache 2.4 with mod_php, which the official Nextcloud image runs:
+// it executes the file with any character percent-encoded, with //, with
+// /./ and with a trailing /path, so every character is matched in either
+// form. Only the path is judged, on a line that looks like a request.
+//
+// The cost: the built-in server is unreachable, so documents cannot be opened
+// for editing while this is applied. A standalone Collabora Online server is
+// not affected by the bug and not touched by this.
+//
+// Not covered: nginx with PHP-FPM was not checked. A path longer than 256
+// bytes laid across a reassembly window move is not seen. Plaintext HTTP/1
+// only: put it behind the TLS terminator.
+//
+// Reassembly is tied to port 80. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 80;
+regex proxy = "[A-Z]+ [^ ?\r\n]*(r|%72)(i|%69)(c|%63)(h|%68)(d|%64)(o|%6[fF])(c|%63)(u|%75)(m|%6[dD])(e|%65)(n|%6[eE])(t|%74)(s|%73)(c|%63)(o|%6[fF])(d|%64)(e|%65)[^ ?\r\n]*(p|%70)(r|%72)(o|%6[fF])(x|%78)(y|%79)(\.|%2[eE])(p|%70)(h|%68)(p|%70)";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 80) decide pass;
+  if (scan(payload, 4096) & proxy) decide rst("nextcloud_code_proxy", 0);
+  decide pass;
+}

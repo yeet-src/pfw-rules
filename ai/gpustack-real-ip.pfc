@@ -1,0 +1,46 @@
+// @description Resets requests that bring their own X-GPUStack-Real-IP header, which GPUStack trusts to mean "this came from localhost".
+// @patches GPUStack before 2.2.0
+// @cve CVE-2026-102895
+// @severity critical
+// @tags http, ai, gpustack, authentication-bypass, rce
+// @knob port  The port to guard. Streams are reassembled only on 80; see below.
+//
+// GPUStack skips authentication for requests from the loopback address, and
+// takes the client's address from the X-GPUStack-Real-IP header when there is
+// one. A client that sends the header itself is the administrator: users,
+// API keys, worker and cloud secrets, and code execution through
+// POST /v2/inference-backends/from-yaml. The vendor's advice for a site that
+// cannot upgrade is to strip the header at the edge; this is the edge.
+//
+//   gpustack_real_ip  a header line X-GPUStack-Real-IP, whatever it holds
+//
+// Checked against uvicorn, the server GPUStack runs on: it hands the
+// application the header in any case, with no space or a tab after the colon,
+// with the value folded onto the next line, after a bare line feed, and after
+// kilobytes of other headers. It does not with underscores for hyphens or a
+// space before the colon. The match is the start of a line, the name and the
+// colon, so a body that only names the header in passing is left alone.
+//
+// Where to put it matters. This belongs in front of everything: if a proxy
+// of yours adds the header on the way in, apply this on the hop before that
+// proxy, not after it, or every request is reset.
+//
+// Not covered: the other half of the advisory. A reverse proxy on the same
+// host as GPUStack (proxy_pass http://127.0.0.1:...) makes every request
+// loopback with no header at all; for that, set force_auth_localhost=true.
+// Plaintext HTTP/1 only.
+//
+nocase;
+// Reassembly is tied to port 80. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 80;
+pattern crlf = "\nx-gpustack-real-ip:";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 80) decide pass;
+  if (scan(payload, 4096) & crlf) decide rst("gpustack_real_ip", 0);
+  decide pass;
+}

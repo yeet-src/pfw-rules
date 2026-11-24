@@ -1,0 +1,55 @@
+// @description Resets requests for a CMS installer left reachable on a live site: Drupal's and WordPress's install.php, and anything under wp-content/upgrade/.
+// @patches Drupal before 10.6.22, 11.3.22 and 11.4.13; WordPress before 7.1.4
+// @cve CVE-2026-132165, CVE-2026-119977
+// @severity critical
+// @tags http, cms, drupal, wordpress, php, rce, installer
+// @knob port  The port to guard. Streams are reassembled only on 80; see below.
+//
+// Two bugs with one cure. Drupal's installer can be driven to reinstall a
+// live site (SA-CORE-2026-017, exploited since 19 November 2026). WordPress
+// unpacks a core upgrade into a predictable, web-served directory, and for
+// the length of the upgrade the staged copy's own installer answers there.
+// Neither path has any business being requested on a site that is running:
+//
+//   cms_installer        a request whose path holds install.php: Drupal's
+//                        /core/install.php, WordPress's /wp-admin/install.php
+//                        and the copy of it staged during an upgrade
+//   cms_upgrade_staging  a request for anything under /wp-content/upgrade/
+//
+// Checked against Apache 2.4 with mod_php, which the official Drupal and
+// WordPress images run. It executes the file for //core//install.php,
+// /core/./install.php, /core/x/../install.php, any character percent-encoded
+// (install%2ephp, %69nstall.php), a trailing /extra/path, an absolute URL and
+// any method, FOO included. It does not for another case, a `;` or a trailing
+// dot. So every character is matched in either form and the method is any
+// upper-case word. Only the path is judged, up to its `?`, on a line that
+// looks like a request: a page that mentions install.php is not one.
+//
+// The WordPress half rests on CISA's and Wordfence's descriptions of the bug
+// (web-accessible staging paths, a staged installer); the vendor names no
+// path. The Drupal half is the vendor's own: secure the installer.
+//
+// The cost: the installers stop working, so apply it after the site is
+// installed. A WordPress upgrade itself is not affected; it does not fetch
+// its staging directory over HTTP.
+//
+// Not covered: nginx with PHP-FPM may route these paths differently and was
+// not checked. A path longer than 256 bytes laid across a reassembly window
+// move is not seen. Plaintext HTTP/1 only: put it behind the TLS terminator.
+//
+// Reassembly is tied to port 80. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 80;
+regex installer = "[A-Z]+ [^ ?\r\n]*(i|%69)(n|%6[eE])(s|%73)(t|%74)(a|%61)(l|%6[cC])(l|%6[cC])(\.|%2[eE])(p|%70)(h|%68)(p|%70)( |/|\?)";
+regex staging = "[A-Z]+ [^ ?\r\n]*(/|%2[fF])(w|%77)(p|%70)(-|%2[dD])(c|%63)(o|%6[fF])(n|%6[eE])(t|%74)(e|%65)(n|%6[eE])(t|%74)(/|%2[fF])(u|%75)(p|%70)(g|%67)(r|%72)(a|%61)(d|%64)(e|%65)(/|%2[fF])";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 80) decide pass;
+  mask m = scan(payload, 4096);
+  if (any(m, staging)) decide rst("cms_upgrade_staging", 0);
+  if (any(m, installer)) decide rst("cms_installer", 0);
+  decide pass;
+}

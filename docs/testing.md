@@ -106,7 +106,8 @@ it accepts, and those answers are the cases:
 | Tomcat 9.0 | which path spellings reach the same servlet |
 | PHP 8.3 under Apache 2.4 | which multipart spellings are parsed, and how deep names nest |
 | Log4j 2.14.1 | which strings make the logger open a connection (`test/fixtures/log4j-2.14.1-lookups.json`) |
-| FastAPI on uvicorn | how paths are routed and queries decoded |
+| FastAPI on uvicorn | how paths are routed, queries decoded and header lines parsed |
+| Apache 2.4 with mod_php | which path spellings execute a PHP file |
 | nginx 1.27, httpd 2.4.71 | how cleartext HTTP/2 is started |
 | `unserialize()` in PHP 8.3 | which strings become an object, and through which transports |
 | OpenJDK 17's Base64 decoders | that the Java4Shell shape is never valid Base64 |

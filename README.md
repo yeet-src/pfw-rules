@@ -26,6 +26,7 @@ One product, one endpoint, one bug.
 |---|---|---|---|
 | [`apps/confluence-remote-api.pfc`](apps/confluence-remote-api.pfc) | Confluence Data Center 1.x–9.x with the Remote API on. CVE-2026-90436, Apache Axis 1.x. In CISA KEV. | Requests for the SOAP API (`soap-axis1`) and the XML-RPC API (`/rpc/xmlrpc`). | 8090 |
 | [`apps/roller-xmlrpc.pfc`](apps/roller-xmlrpc.pfc) | Apache Roller 4.0.0–6.1.4. CVE-2026-129448. In CISA KEV. | Requests for `/roller-services/xmlrpc`. | 8080 |
+| [`apps/nextcloud-builtin-code.pfc`](apps/nextcloud-builtin-code.pfc) | Nextcloud's built-in Collabora server (richdocumentscode) before 26.4.303. CVE-2026-110447. In CISA KEV. | Requests for the app's `proxy.php`. | 80 |
 
 ### AI tooling
 
@@ -33,11 +34,13 @@ One product, one endpoint, one bug.
 |---|---|---|---|
 | [`ai/monai-label.pfc`](ai/monai-label.pfc) | MONAI Label 0.8.5 and earlier. CVE-2026-133968. In CISA KEV. | `/datastore/` requests whose query holds `..`, a slash, a backslash or an encoded dot. | 8000 |
 | [`ai/litellm-guardrails.pfc`](ai/litellm-guardrails.pfc) | LiteLLM 1.81.8 up to 1.83.10. CVE-2026-40217. In CISA KEV. | `POST /guardrails/test_custom_code`. | 4000 |
+| [`ai/gpustack-real-ip.pfc`](ai/gpustack-real-ip.pfc) | GPUStack before 2.2.0. CVE-2026-102895. In CISA KEV. | Requests that bring their own `X-GPUStack-Real-IP` header, which GPUStack trusts to mean "from localhost". | 80 |
 
 ### Content management
 
 | policy | shields | what it resets | port |
 |---|---|---|---|
+| [`cms/installers.pfc`](cms/installers.pfc) | Drupal before 10.6.22, 11.3.22, 11.4.13 (CVE-2026-132165) and WordPress before 7.1.4 (CVE-2026-119977). Both in CISA KEV. | Requests for `install.php`, and for anything under `/wp-content/upgrade/`. | 80 |
 | [`cms/php-object-injection.pfc`](cms/php-object-injection.pfc) | WordPress plugins and other PHP code that unserializes request data: Simple Shopping Cart (CVE-2026-131782), APCu Manager (CVE-2026-131754), and the class of bug. | A serialized PHP object (`O:n:"` or `C:n:"`), raw, percent-encoded or base64. | 80 |
 
 ### Runtimes
@@ -99,7 +102,8 @@ of these cannot have both yet.
 **Each has a cost, and it is written down.** The endpoint blocks stop the
 legitimate use of that endpoint: blog clients that post to Roller over
 XML-RPC, Confluence SOAP integrations, the guardrail tester in LiteLLM's admin
-UI. `log4shell` resets `${HOME:-/root}` in a posted shell script. `h2c` breaks
+UI, document editing through Nextcloud's built-in Collabora. `log4shell`
+resets `${HOME:-/root}` in a posted shell script. `h2c` breaks
 a port that is meant to carry cleartext HTTP/2, gRPC above all. Read the
 policy's comments for its own list, and for the knob that relaxes it.
 
@@ -120,6 +124,8 @@ The cases come from running the real software and recording what it accepts:
 | policy | checked against |
 |---|---|
 | `confluence-remote-api`, `roller-xmlrpc`, `tomcat-strict-path` | Tomcat 9.0: which path spellings reach the same servlet. Confluence and Roller themselves were not run. |
+| `installers`, `nextcloud-builtin-code` | Apache 2.4 with mod_php, which the official Drupal, WordPress and Nextcloud images run: which path spellings execute a PHP file. None of the three products was run, and nginx with PHP-FPM was not checked. The WordPress half follows CISA's and Wordfence's description; the vendor names no path. |
+| `gpustack-real-ip` | uvicorn, the server GPUStack runs on: which spellings of a header line reach the application. GPUStack was not run. |
 | `php2shell`, `php-object-injection` | PHP 8.3 under Apache 2.4: which multipart spellings its parser accepts, and which strings `unserialize()` builds an object from, by which transport. |
 | `log4shell` | Log4j 2.14.1: which of 25 lookup spellings made the logger connect out. All 17 that did are reset. |
 | `java4shell` | The shape shirudo's `java-base64` guard refuses inside the JVM, and OpenJDK 17: its decoder refuses every form of it, and no encoder output of 1 to 5,000 bytes has it. Not run on an affected x86-64 JVM. |
