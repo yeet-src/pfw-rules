@@ -71,9 +71,21 @@ if (!toml.includes(KEEPER)) { console.error("pfw's service.toml no longer starts
 writeFileSync(`${service}/service.toml`, toml.replace(KEEPER, `args = ["--iface", "lo", "--state-file", ${JSON.stringify(stateFile)}]`));
 env.PFW_SOURCE = service;
 
+/* yeet serves a login page in place of every route of a host that is not
+ * logged in, the firewall's control route among them, and the daemon in a
+ * fresh namespace is not. A key in YEET_API_KEY logs it in. */
+if (process.env.YEET_API_KEY) {
+  const r = await sh(process.env.YEET || "yeet", ["login", "--key", process.env.YEET_API_KEY]);
+  console.log(r.ok ? "logged the namespace's daemon in with the key in YEET_API_KEY" : "yeet refused the key in YEET_API_KEY");
+}
+
 try {
   console.log(`${PFW} up, from a copy of ${built} that keeps its state in ${stateFile}`);
   await pfw("up");
+  if (!/\S/.test(await pfw("status"))) {
+    console.error("\nThe firewall is up but its control route answers with nothing: this host's daemon is not\nlogged in to yeet, which serves a login page in place of the service. Set YEET_API_KEY\n(in CI, as a repository secret) or run `yeet login` first.");
+    process.exitCode = 3; throw new Error("not logged in to yeet");
+  }
   await sh(PFW, ["clear"]);
   await sh(PFW, ["unshadow"]);
   check("with no policy, a request is served", (await curl([`${await serve(80)}/`])) === "served");
@@ -129,4 +141,4 @@ try {
 }
 
 console.log(`\n${n - fail}/${n} passed`);
-process.exit(fail ? 1 : 0);
+process.exit(process.exitCode || (fail ? 1 : 0));

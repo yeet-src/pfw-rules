@@ -10,7 +10,8 @@ name: test
 #                 program and driven over loopback TCP
 #   end to end    test/e2e.mjs: the firewall brought up with `pfw up`, each
 #                 policy enforced with `pfw apply -f`, real requests sent at
-#                 a real server; the ones a policy names must be cut off
+#                 a real server; the ones a policy names must be cut off.
+#                 Needs the YEET_API_KEY secret, and is skipped without it
 #
 # The last two run in a network namespace of their own, with their own yeetd.
 
@@ -79,5 +80,16 @@ jobs:
       - name: Kernel, in a namespace of its own
         run: PFW_CORE="$PWD/pfw/.deps/pfw-core" sh test/kernel-ns.sh
 
+      # yeet serves a login page in place of every route of a host that is not
+      # logged in, so driving a firewall through `pfw` takes a login. A key in
+      # the YEET_API_KEY secret gives the test's daemon one. A pull request
+      # from a fork has no secrets: there the step is skipped, and says so.
       - name: End to end, with pfw
-        run: PFW="$(command -v pfw)" sh test/in-namespace.sh "$(command -v node)" test/e2e.mjs
+        env:
+          YEET_API_KEY: ${{ secrets.YEET_API_KEY }}
+        run: |
+          if [ -z "$YEET_API_KEY" ]; then
+            echo "::warning::no YEET_API_KEY secret, so pfw cannot be driven here: the end-to-end test is skipped"
+            exit 0
+          fi
+          PFW="$(command -v pfw)" sh test/in-namespace.sh "$(command -v node)" test/e2e.mjs

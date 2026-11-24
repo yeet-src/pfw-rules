@@ -85,6 +85,11 @@ export const e2e = ({ url, fixture }) => [
 say. It also checks that applying the policy did not cost `pfw` its own
 control connection, and that `pfw knob set port` moves the policy.
 
+It needs a yeet login: yeet serves a login page in place of every route of a
+host that is not logged in, the firewall's control route among them. With
+`YEET_API_KEY` set the test logs its own daemon in; in CI that is a
+repository secret, and the step is skipped where there is none.
+
 Run it through `test/in-namespace.sh`. It changes the firewall it is pointed
 at. It also runs a copy of the built service whose state file is moved into a
 scratch directory: the service saves its policy in `/var/lib/pfw/state.js`,
