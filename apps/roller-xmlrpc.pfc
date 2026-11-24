@@ -3,7 +3,7 @@
 // @cve CVE-2026-129448, CVE-2026-82384
 // @severity critical
 // @tags http, java, rce, deserialization
-// @knob port  The port to guard.
+// @knob port  The port to guard. Streams are reassembled only on 8080; see below.
 //
 // Roller deserializes an XML-RPC request before it authenticates the sender,
 // and before it checks whether XML-RPC is switched on in the admin UI. The
@@ -23,7 +23,12 @@
 // Plaintext HTTP/1 only: put it behind the TLS terminator. It reads nothing
 // on an AJP port or over HTTP/2.
 nocase;
-reassemble;
+// Reassembly is tied to port 8080. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 8080;
 regex services = "(r|%72)(o|%6f)(l|%6c)(l|%6c)(e|%65)(r|%72)(-|%2d)(s|%73)(e|%65)(r|%72)(v|%76)(i|%69)(c|%63)(e|%65)(s|%73)";
 regex xmlrpc = "(x|%78)(m|%6d)(l|%6c)(r|%72)(p|%70)(c|%63)";
 filter {

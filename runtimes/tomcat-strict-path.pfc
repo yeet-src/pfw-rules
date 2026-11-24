@@ -2,7 +2,7 @@
 // @patches Hardening for any application on Apache Tomcat; no single CVE
 // @severity medium
 // @tags http, java, tomcat, hardening, path-normalization
-// @knob port    The port to guard.
+// @knob port    The port to guard. Streams are reassembled only on 8080; see below.
 // @knob params  1 lets ;parameters through, for an app that still puts ;jsessionid in its URLs.
 //
 // Tomcat 9 serves /a/b for every one of /a;x=y/b, /a//b, /a/./b, /a/x/../b
@@ -25,7 +25,13 @@
 //
 // A path longer than a reassembly window can keep, 256 bytes, with its odd
 // part laid across a window move is not seen. Plaintext HTTP/1 only.
-reassemble;
+//
+// Reassembly is tied to port 8080. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 8080;
 regex param = "(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) (/|http)[^ ?\r\n]*;";
 regex segs = "(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) (//|(/|http)[^ ?\r\n]*([^: ?\r\n]//|/\.\.?(/| |\?|;)))";
 regex enc = "(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) (/|http)[^ ?\r\n]*%(2[dDeEfF]|3[0-9bB]|4[1-9a-fA-F]|5[0-9aAcCfF]|6[1-9a-fA-F]|7[0-9aA])";

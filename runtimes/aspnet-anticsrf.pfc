@@ -1,0 +1,51 @@
+// @description Resets ASP.NET form posts whose Idunno.AntiCsrf token is anything but a serialized string.
+// @patches Idunno.AntiCsrf 0.9.1.0 (0.9.1 Beta), the last release; there will be no fix
+// @cve CVE-2026-131914
+// @severity critical
+// @tags http, aspnet, dotnet, rce, deserialization
+// @knob port  The port to guard. Streams are reassembled only on 80; see below.
+//
+// The module hands the hidden CSRF form field to ObjectStateFormatter with no
+// signature check, so one unauthenticated POST to any .aspx page that carries
+// a crafted field runs code in the IIS worker. The library was abandoned in
+// 2008 and the only remedy is to remove it. Until then this lets through the
+// one value the module itself ever writes and resets everything else.
+//
+// The module writes ObjectStateFormatter.Serialize(guid): the bytes ff 01,
+// then 05 for "a string", then the GUID. In base64 that always opens `/wEF`.
+// Anything that can do harm is some other type and opens some other way, and
+// what follows a string is never read. So:
+//
+//   anticsrf_token  a __CSRFTOKEN field, in a urlencoded body or a multipart
+//                   part, whose value does not open `/wEF`
+//
+// The field is also matched under the name RaiseException, which is what the
+// module calls it when its <csrfSettings> element is left out. __CSRFTOKEN
+// and the four opening characters are matched raw or percent-encoded, and a
+// value that opens with whitespace is reset: the decoder skips it, a browser
+// never sends it. RaiseException is matched only as written: with its letters
+// percent-encoded too the automaton outgrows the kernel's regex table, so on
+// a site with no <csrfSettings> that spelling gets through.
+//
+// What it rests on: the token layout is Microsoft's documented one (the same
+// `/wE` every ViewState opens with), and the decoder's tolerance of
+// whitespace was checked on Mono, but the module itself has not been run. If
+// a site's own tokens open differently its forms will stop posting, which is
+// the direction to be wrong in. A site that renamed the field with
+// formFieldName is not covered at all.
+//
+// Plaintext HTTP/1 only: put it behind the TLS terminator.
+nocase;
+// Reassembly is tied to port 80. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 80;
+regex token = "(((_|%5f)(_|%5f)(c|%43|%63)(s|%53|%73)(r|%52|%72)(f|%46|%66)(t|%54|%74)(o|%4f|%6f)(k|%4b|%6b)(e|%45|%65)(n|%4e|%6e)|raiseexception)=|name=[\"']?(__csrftoken|raiseexception)[\"']?[^\r\n]*\r\n([^\r\n]+\r\n)*\r\n)([^%/]|%[^2]|%2[^f]|(/|%2f)([^%w]|%[^57]|%5[^7]|%7[^7]|(w|%77|%57)([^%e]|%[^46]|%4[^5]|%6[^5]|(e|%45|%65)([^%f]|%[^46]|%4[^6]|%6[^6]))))";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 80) decide pass;
+  if (scan(payload, 4096) & token) decide rst("anticsrf_token", 0);
+  decide pass;
+}

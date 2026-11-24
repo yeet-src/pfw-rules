@@ -3,7 +3,7 @@
 // @cve CVE-2026-109618, CVE-2026-109619
 // @severity critical
 // @tags http, php, rce, multipart
-// @knob port       The port to guard.
+// @knob port       The port to guard. Streams are reassembled only on 80; see below.
 // @knob multipart  0 resets every multipart request, for an app that takes no uploads.
 // @knob chunked    1 lets a chunked multipart request through.
 // @knob progress   1 lets the PHP_SESSION_UPLOAD_PROGRESS field through.
@@ -41,7 +41,12 @@
 // mod_php, FrankenPHP, or the proxy in front). It reads nothing on a TLS port
 // or a FastCGI socket.
 nocase;
-reassemble;
+// Reassembly is tied to port 80. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 80;
 pattern progress = "php_session_upload_progress";
 pattern multipart = "multipart/form-data", te = "transfer-encoding:";
 regex nested = "(\[[^\]]*\]){8}";

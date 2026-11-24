@@ -1,14 +1,18 @@
 name: test
 
 # The policies are tested against pfw as it is built today: pfw is checked
-# out and built the way its own CI builds it, and the pfw-core that build
-# fetched and compiled is what the policies run on.
+# out, built, packaged and installed the way its own CI does it, and the
+# pfw-core that build fetched and compiled is what the policies run on.
 #
 #   interpreter   test/run.mjs: every policy compiles, has test cases, resets
 #                 what it names and leaves ordinary traffic alone
 #   kernel        test/kernel-ns.sh: each policy loaded into the real XDP
-#                 program and driven over loopback TCP, in a network
-#                 namespace of its own with its own yeetd
+#                 program and driven over loopback TCP
+#   end to end    test/e2e.mjs: the firewall brought up with `pfw up`, each
+#                 policy enforced with `pfw apply -f`, real requests sent at
+#                 a real server; the ones a policy names must be cut off
+#
+# The last two run in a network namespace of their own, with their own yeetd.
 
 on:
   push:
@@ -48,9 +52,18 @@ jobs:
         run: |
           set -euo pipefail
           make -C pfw
+          make -C pfw pkg
           git -C pfw rev-parse HEAD
           git -C pfw/.deps/pfw-core rev-parse HEAD
           test -f pfw/.deps/pfw-core/bin/vm.bpf.o
+
+      - name: Install pfw, as a user would
+        run: |
+          set -euo pipefail
+          cp pfw/install.sh "$RUNNER_TEMP/install.sh"
+          cd "$RUNNER_TEMP"
+          sh ./install.sh --package "$GITHUB_WORKSPACE/pfw/pkg/pfw.tar.gz" --no-login
+          command -v pfw
 
       - uses: actions/setup-node@v4
         with:
@@ -61,3 +74,6 @@ jobs:
 
       - name: Kernel, in a namespace of its own
         run: PFW_CORE="$PWD/pfw/.deps/pfw-core" sh test/kernel-ns.sh
+
+      - name: End to end, with pfw
+        run: PFW="$(command -v pfw)" sh test/in-namespace.sh "$(command -v node)" test/e2e.mjs

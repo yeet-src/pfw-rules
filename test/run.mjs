@@ -14,9 +14,10 @@
  * exercised by test/kernel.mjs, on a Linux host.
  *
  * Cases come from the software, not from guesses: each cases file says which
- * server it was checked against. test/fixtures/*.http are what curl,
- * python-requests, wget and node's fetch really sent to a listener, byte for
- * byte, and every one must pass every policy.
+ * server it was checked against. test/fixtures/ holds what curl,
+ * python-requests, wget, node and openssl really sent to a listener, byte for
+ * byte: requests (*.http) and TLS ClientHellos (*.bin). Every one a current
+ * client sent must pass every policy.
  */
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 
@@ -102,8 +103,10 @@ for (const f of progs.keys()) {
 
 /* ---- cross-check: real client traffic through every policy -------------- */
 {
-  const fx = readdirSync(new URL("test/fixtures/", root)).filter((n) => n.endsWith(".http")).sort();
-  ok(fx.length >= 10, "captured client requests are present", `${fx.length} found`);
+  /* requests, and the ClientHellos of current TLS clients: nothing here is an attack */
+  const LEGACY = /clienthello-openssl-(tls10|tls11|null-suite)\.bin$/;
+  const fx = readdirSync(new URL("test/fixtures/", root)).filter((n) => n.endsWith(".http") || (n.endsWith(".bin") && !LEGACY.test(n))).sort();
+  ok(fx.length >= 16, "captured client traffic is present", `${fx.length} found`);
   for (const f of progs.keys()) {
     for (const n of fx) {
       const data = readFileSync(new URL(`test/fixtures/${n}`, root));

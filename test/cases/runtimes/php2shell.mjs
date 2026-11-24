@@ -47,3 +47,12 @@ export default function ({ f, run, stream, ok, progs, bytes, show, root, readFil
   run(f, "port knob", multipart(upload, "Transfer-Encoding: chunked\r\n"), "rst(php2shell_chunked)", { dport: 8080, knobs: { port: 8080 } });
   run(f, "UDP", multipart(upload, "Transfer-Encoding: chunked\r\n"), "pass", { ...web, proto: 17 });
 }
+
+/* Sent through a firewall enforcing this policy with `pfw apply -f` (test/e2e.mjs). */
+export const e2e = ({ url }) => [
+  { name: "curl -F PHP_SESSION_UPLOAD_PROGRESS=x", curl: ["-F", "PHP_SESSION_UPLOAD_PROGRESS=x", "-F", "title=holiday", `${url}/upload.php`], want: "cut" },
+  { name: "a chunked multipart upload", curl: ["-H", "Transfer-Encoding: chunked", "-F", "title=holiday", `${url}/upload.php`], want: "cut" },
+  { name: "a field name nested nine deep", curl: ["-F", "a[k][k][k][k][k][k][k][k][k]=x", `${url}/upload.php`], want: "cut" },
+  { name: "an ordinary multipart upload", curl: ["-F", "title=holiday", "-F", "tags[]=a", `${url}/upload.php`], want: "served" },
+  { name: "multipart=0: an ordinary upload", knobs: { multipart: 0 }, curl: ["-F", "title=holiday", `${url}/upload.php`], want: "cut" },
+];

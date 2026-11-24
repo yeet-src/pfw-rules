@@ -3,7 +3,7 @@
 // @cve CVE-2026-90436
 // @severity critical
 // @tags http, java, rce, soap, confluence
-// @knob port    The port to guard.
+// @knob port    The port to guard. Streams are reassembled only on 8090; see below.
 // @knob xmlrpc  1 lets /rpc/xmlrpc through and resets only the SOAP paths.
 //
 // Apache Axis 1.x is end-of-life and has an unauthenticated unsafe-reflection
@@ -33,7 +33,12 @@
 // Plaintext HTTP/1 only: put it behind the TLS terminator. It reads nothing
 // on an AJP port or over HTTP/2.
 nocase;
-reassemble;
+// Reassembly is tied to port 8090. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 8090;
 regex soap = "(s|%73)(o|%6f)(a|%61)(p|%70)(-|%2d)(a|%61)(x|%78)(i|%69)(s|%73)(1|%31)";
 regex rpc = "/(r|%72)(p|%70)(c|%63)";
 regex xmlrpc = "(x|%78)(m|%6d)(l|%6c)(r|%72)(p|%70)(c|%63)";

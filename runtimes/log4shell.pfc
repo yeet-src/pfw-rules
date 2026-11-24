@@ -3,7 +3,7 @@
 // @cve CVE-2021-44228, CVE-2021-45046
 // @severity critical
 // @tags http, java, rce, log4j
-// @knob port      The port to guard.
+// @knob port      The port to guard. Streams are reassembled only on 8080; see below.
 // @knob defaults  1 lets ${name:-value} through, for an app that is posted shell or template text.
 //
 // Log4j resolves ${...} in anything it logs, so the string can sit in any
@@ -32,7 +32,12 @@
 //
 // Plaintext HTTP/1 only: put it behind the TLS terminator.
 nocase;
-reassemble;
+// Reassembly is tied to port 8080. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 8080;
 regex jndi = "(\$|%24|\\u0024)(\{|%7b|\\u007b)jndi";
 regex lookup = "(\$|%24|\\u0024)(\{|%7b|\\u007b)(lower|upper|env|sys|date|ctx|java|main|bundle|k8s|docker|web|map|sd|log4j|marker|spring|event|base64|jvmrunargs)(:|%3a|\\u003a)";
 regex dflt = "(\$|%24|\\u0024)(\{|%7b|\\u007b)[^}]*(:|%3a|\\u003a)-";

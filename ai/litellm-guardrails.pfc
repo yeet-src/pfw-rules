@@ -3,7 +3,7 @@
 // @cve CVE-2026-40217
 // @severity critical
 // @tags http, ai, rce, sandbox-escape
-// @knob port  The port to guard.
+// @knob port  The port to guard. Streams are reassembled only on 4000; see below.
 //
 // The endpoint runs Python the caller supplies inside a home-made sandbox,
 // which can be escaped to run code on the proxy host. It wants a credential,
@@ -21,7 +21,12 @@
 //
 // Plaintext HTTP/1 only: put it behind the TLS terminator.
 nocase;
-reassemble;
+// Reassembly is tied to port 4000. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 4000;
 regex tester = "post [^ ?\r\n]*(/|%2f)(g|%67)(u|%75)(a|%61)(r|%72)(d|%64)(r|%72)(a|%61)(i|%69)(l|%6c)(s|%73)(/|%2f)(t|%74)(e|%65)(s|%73)(t|%74)(_|%5f)(c|%63)(u|%75)(s|%73)(t|%74)(o|%6f)(m|%6d)(_|%5f)(c|%63)(o|%6f)(d|%64)(e|%65)";
 filter {
   if (proto != 6) decide pass;

@@ -1,0 +1,78 @@
+// @description Resets TLS handshakes from clients that offer only SSLv3, TLS 1.0 or 1.1; optionally those offering a NULL, RC4 or EXPORT suite.
+// @patches Hardening for any TLS listener; the protocol versions deprecated by RFC 8996
+// @severity medium
+// @tags tls, hardening, handshake
+// @knob port    The port to guard.
+// @knob suites  1 also resets a client that offers any NULL, RC4 or EXPORT suite.
+//
+// The one part of a TLS connection a filter can read is the ClientHello, and
+// it says what the client is. Parsed from its real fields, not scanned:
+//
+//   TLS record (type 22) -> handshake header (type 1 = ClientHello) -> body:
+//     legacy_version(2) random(32) session_id<u8> cipher_suites<u16> ...
+//
+//   tls_sslv3           legacy_version 0x0300 or lower
+//   tls_legacy_version  legacy_version 0x0301 or 0x0302: TLS 1.0 or 1.1 at
+//                       best. A TLS 1.3 client says 0x0303 here and settles
+//                       the rest in an extension, so it passes
+//   tls_weak_suites     only when `suites` is 1: a NULL, RC4 or EXPORT suite
+//                       among the first 64 offered, read at the suites' real
+//                       alignment
+//
+// The record header of a modern hello still says 0x0301; that is not the
+// client's version and is ignored. Checked against the hellos openssl 3.6,
+// curl, python and node really send (test/fixtures/clienthello-*.bin): the
+// current ones pass and openssl -tls1 and -tls1_1 are reset.
+//
+// The suite rule is off unless asked for because offering is not using: the
+// curl that ships with macOS (8.7.1 on LibreSSL 3.3.6) still lists four RC4
+// suites after forty modern ones, and a server that would never pick them
+// loses that client if the rule is on. Turn it on where the clients are known.
+//
+// It reads the first segment of the hello, where these fields are. A client
+// that splits its hello before the suite list is not judged, and what is not
+// a ClientHello passes. Adapted from pfw-core's contrib/tls_hello_policy.pfc.
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 443) decide pass;
+  if (len == 0) decide pass;
+
+  let rec = 0;
+  frame (type = u8 @ 0, len = be16 @ 3, head = 5) up to 1 { rec = frame.type; }
+  if (rec != 22) decide pass;                    // not a handshake record
+  let p = payload + 5;
+  let hs = 0;
+  frame at (p) (type = u8 @ 0, len = be24 @ 1, head = 4) up to 1 { hs = frame.type; }
+  if (hs != 1) decide pass;                      // not a ClientHello
+  p = p + 4;                                     // the ClientHello body
+
+  let ver = 0x0303;
+  frame at (p) (len = be16 @ 0, head = 2) up to 1 { ver = frame.len; }
+  if (ver <= 0x0300) decide rst("tls_sslv3", 0);
+  if (ver < 0x0303) decide rst("tls_legacy_version", 0);
+
+  p = p + 34;                                    // past legacy_version + random
+  let cs = 0;
+  frame at (p) (len = u8 @ 0, head = 1) up to 1 { cs = frame.data + frame.len; }   // past session_id
+  if (cs == 0) decide pass;
+  let stop = 0;
+  frame at (cs) (len = be16 @ 0, head = 2) up to 1 { cs = frame.data; stop = frame.data + frame.len; }
+  if (stop == 0) decide pass;
+
+  if (knob("suites") ?? 0 == 0) decide pass;
+  let weak = 0;
+  repeat (64) {
+    if (cs < stop) {
+      frame at (cs) (len = be16 @ 0, head = 2) up to 1 {      // frame.len = this suite
+        match (frame.len) {
+          case 0x0001, 0x0002, 0x003b                 { weak = 1; }   // NULL encryption
+          case 0x0004, 0x0005, 0xc007, 0xc011         { weak = 1; }   // RC4
+          case 0x0003, 0x0006, 0x0008, 0x0014, 0x0017 { weak = 1; }   // EXPORT-grade
+        }
+      }
+      cs = cs + 2;
+    }
+  }
+  if (weak == 1) decide rst("tls_weak_suites", 0);
+  decide pass;
+}

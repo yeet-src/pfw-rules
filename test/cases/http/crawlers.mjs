@@ -10,3 +10,10 @@ export default function ({ f, run, req, get }) {
   run(f, "another port", as("GPTBot/1.2"), "pass", { dport: 8080 });
   run(f, "port knob", as("GPTBot/1.2"), "rst(crawler)", { dport: 8080, knobs: { port: 8080 } });
 }
+
+/* Sent through a firewall enforcing this policy with `pfw apply -f` (test/e2e.mjs). */
+export const e2e = ({ url }) => [
+  { name: "curl -A GPTBot", curl: ["-A", "Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)", `${url}/`], want: "cut" },
+  { name: "curl -A ClaudeBot", curl: ["-A", "ClaudeBot/1.0", `${url}/`], want: "cut" },
+  { name: "a browser", curl: ["-A", "Mozilla/5.0 (X11; Linux x86_64) Firefox/133.0", `${url}/`], want: "served" },
+];

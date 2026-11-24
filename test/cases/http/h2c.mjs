@@ -20,3 +20,12 @@ export default function ({ f, run, stream, ok, progs, bytes, show, root, readFil
   run(f, "a body that quotes the preface", post("/notes", "Content-Type: text/plain\r\n", "the preface is PRI * HTTP/2.0 followed by SM"), "pass", web);
   run(f, "another port", PREFACE + SETTINGS, "pass", { dport: 8080 });
 }
+
+/* Sent through a firewall enforcing this policy with `pfw apply -f` (test/e2e.mjs). */
+/* Raw bytes, not curl --http2: against a server that only speaks HTTP/1 curl
+ * fails either way, and the test has to tell a reset from a reply. */
+export const e2e = ({ url }) => [
+  { name: "the HTTP/2 client preface", raw: Buffer.from("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n\x00\x00\x00\x04\x00\x00\x00\x00\x00", "latin1"), want: "cut" },
+  { name: "a request asking to upgrade to h2c", raw: Buffer.from("GET / HTTP/1.1\r\nHost: t\r\nConnection: Upgrade, HTTP2-Settings\r\nUpgrade: h2c\r\nHTTP2-Settings: AAMAAABkAAQAoAAAAAIAAAAA\r\n\r\n", "latin1"), want: "cut" },
+  { name: "curl --http1.1", curl: ["--http1.1", `${url}/`], want: "served" },
+];

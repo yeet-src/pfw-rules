@@ -15,8 +15,11 @@ what it does not decide, it must pass.
 |---|---|
 | `baseline/` | policies that decide nothing about content |
 | `http/` | rules about HTTP itself, whatever serves it |
-| `runtimes/` | a language runtime, library or server every app on it shares: PHP, Log4j, Tomcat |
-| `apps/` | one product: its endpoint, its bug |
+| `tls/` | rules about the TLS handshake, the part a filter can read |
+| `runtimes/` | a language runtime, library or server every app on it shares: PHP, the JVM, Log4j, Tomcat |
+| `cms/` | content management systems and their plugins |
+| `ai/` | model servers, proxies and labelling tools |
+| `apps/` | any other single product: its endpoint, its bug |
 
 Add its cases at the same path under `test/cases/`, and a row to the README.
 
@@ -64,6 +67,14 @@ quoted, single-quoted or bare. Log4j resolves `${jndi${::-:}ldap…}`, which has
 no `jndi:` in it. A literal copied from a write-up is stepped around by the
 first person who tries. Run the real software and ask it.
 
+**Never a bare `reassemble;`.** Without a port it follows every TCP connection
+on the interface, and a connection first seen half-way is reset. Applying
+such a policy cut every connection already open on the host, on any port,
+`pfw`'s own control connection included (so `pfw apply` reported a failure it
+had not had), and on loopback the resets fed themselves into a storm. Write
+`reassemble 80;`, the same number as the `port` knob's default, and say in
+the comments that the knob alone does not move reassembly.
+
 **The match mask is one window.** In the kernel, `scan` reports what is in the
 current reassembly window, not what the connection has carried. Two tokens
 that a client can put kilobytes apart (two headers, two path segments) each
@@ -83,6 +94,10 @@ kernel has been seen to load.
 upload: `log4shell_default` trips on random bytes about once in 16 MB. Tie a
 rule to the request line where the bug allows it (an upper-case method, a
 target that starts with `/`), and measure the rest.
+
+**`after()` is for literals.** It returns 0 for a `regex`, so a regex match
+has no position to compare with `end`. To ask "does the data end here", read
+the last bytes directly: `u8(end - 1)`.
 
 **`ban` bans an address.** Behind a proxy or a NAT that address is everyone.
 The policies here reset the connection and leave the source alone.

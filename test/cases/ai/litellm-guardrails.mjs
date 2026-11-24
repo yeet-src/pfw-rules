@@ -16,3 +16,10 @@ export default function ({ f, run, stream, ok, progs, bytes, show, root, readFil
   run(f, "GET on the path, which the route refuses", get("/guardrails/test_custom_code"), "pass", web);
   run(f, "another port", post("/guardrails/test_custom_code", "", body), "pass", { dport: 80 });
 }
+
+/* Sent through a firewall enforcing this policy with `pfw apply -f` (test/e2e.mjs). */
+export const e2e = ({ url }) => [
+  { name: "POST /guardrails/test_custom_code", curl: ["-H", "Content-Type: application/json", "-d", "{}", `${url}/guardrails/test_custom_code`], want: "cut" },
+  { name: "the same path, percent-encoded", curl: ["-d", "{}", `${url}/guardrails%2ftest%5fcustom_cod%65`], want: "cut" },
+  { name: "a chat completion that mentions the path", curl: ["-H", "Content-Type: application/json", "-d", '{"messages":[{"role":"user","content":"what is /guardrails/test_custom_code?"}]}', `${url}/v1/chat/completions`], want: "served" },
+];

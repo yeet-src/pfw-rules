@@ -29,3 +29,12 @@ export default function ({ f, run, stream, get, post, tomcatSpellings }) {
   run(f, "params=1 still resets dot segments", get("/a;x/../b"), "rst(path_segments)", { ...web, knobs: { params: 1 } });
   run(f, "another port", get("/a;x/b"), "pass", { dport: 80 });
 }
+
+/* Sent through a firewall enforcing this policy with `pfw apply -f` (test/e2e.mjs). */
+export const e2e = ({ url }) => [
+  { name: "a path parameter", curl: [`${url}/app;x=y/servlet`], want: "cut" },
+  { name: "a dot segment", curl: [`${url}/app/x/../servlet`], want: "cut" },
+  { name: "an encoded letter", curl: [`${url}/app/servle%74`], want: "cut" },
+  { name: "an ordinary path, odd characters only in the query", curl: [`${url}/app/servlet?next=/a/../b;c`], want: "served" },
+  { name: "params=1: a path parameter", knobs: { params: 1 }, curl: [`${url}/login;jsessionid=0123456789ABCDEF`], want: "served" },
+];

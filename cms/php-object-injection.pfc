@@ -1,0 +1,60 @@
+// @description Resets requests that carry a serialized PHP object, raw, percent-encoded or base64.
+// @patches WordPress plugins and other PHP code that unserialize() request data: Simple Shopping Cart (CVE-2026-131782), APCu Manager (CVE-2026-131754)
+// @cve CVE-2026-131782, CVE-2026-131754
+// @severity high
+// @tags http, php, wordpress, cms, deserialization, object-injection
+// @knob port    The port to guard. Streams are reassembled only on 80; see below.
+// @knob base64  1 lets base64-encoded objects through.
+//
+// PHP object injection is one bug with many addresses: a plugin passes a
+// cookie, a form field or a query parameter to unserialize(), and an object
+// the attacker describes is built, with whatever its class does on waking or
+// dying. A plain value never needs to be an object, so the object header
+// itself is the thing to refuse:
+//
+//   php_object         O:<length>:" or C:<length>:" (a custom-serialized
+//                      object), anywhere in the request
+//   php_object_base64  the same header at the start of a base64 run
+//
+// Checked against unserialize() in PHP 8.3 under Apache. It builds an object
+// only from an upper-case O or C, digits with no sign or space (leading zeros
+// are fine), then a colon and a double quote; nested inside an array counts.
+// PHP decodes a form field, query value or cookie once whatever was encoded,
+// so every character is matched raw or as a percent-escape, the escape itself
+// encoded any number of times for code that decodes twice, and the quote with
+// a backslash before it for code that strips slashes, as WordPress does.
+//
+// A written-out O or C must follow something other than a letter or digit, or
+// a percent-escape (the %3B of an encoded `;`). A header is never anywhere
+// else, and text such as ISO:8601:"..." would otherwise match.
+//
+// The cost: a request that legitimately posts a serialized object is reset.
+// Some plugins do send their own settings that way; watch the rule's count in
+// shadow mode before enforcing.
+//
+// The base64 rule is the weak one. PHP's decoder skips any character outside
+// the alphabet, so a run broken up with spaces or dots decodes the same and
+// is not seen, and neither is a header that does not begin the run. It
+// catches the tools that do not bother.
+//
+// Plaintext HTTP/1 only: put it behind the TLS terminator.
+//
+// Reassembly is tied to port 80. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 80;
+regex object = "(([^A-Za-z0-9]|%[0-9a-fA-F][0-9a-fA-F])(O|C)|%(25)*4[fF]|%(25)*43)(:|%(25)*3[aA])([0-9]|%(25)*3[0-9])+(:|%(25)*3[aA])(\\|%(25)*5[cC])?(\"|%(25)*22)";
+regex b64 = "[TQ]zo[w-z0-5](Oi[I-L]|[MNO][DTjz]oi)";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 80) decide pass;
+  let allow_base64 = knob("base64") ?? 0;
+  mask m = scan(payload, 4096);
+  if (any(m, object)) decide rst("php_object", 0);
+  if (any(m, b64)) {
+    if (allow_base64 == 0) decide rst("php_object_base64", 0);
+  }
+  decide pass;
+}

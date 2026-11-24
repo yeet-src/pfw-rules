@@ -26,3 +26,10 @@ export default function ({ f, run, stream, ok, progs, bytes, show, root, readFil
   run(f, "a 64-character DICOM UID and a tag", put("/datastore/label?image=1.2.840.113619.2.55.3.604688119.971.1407250023.123.4567890123456&tag=final"), "pass", web);
   run(f, "another port", put("/datastore/image?image=../x"), "pass", { dport: 80 });
 }
+
+/* Sent through a firewall enforcing this policy with `pfw apply -f` (test/e2e.mjs). */
+export const e2e = ({ url }) => [
+  { name: "PUT /datastore/image?image=../../../tmp/x", curl: ["-X", "PUT", "-F", "file=@/etc/hostname", `${url}/datastore/image?image=../../../tmp/x`], want: "cut" },
+  { name: "the same, encoded", curl: ["-X", "PUT", "-F", "file=@/etc/hostname", `${url}/datastore%2fimage?im%61ge=%2e%2e%2ftmp%2fx`], want: "cut" },
+  { name: "an upload to an ordinary ID", curl: ["-X", "PUT", "-F", "file=@/etc/hostname", `${url}/datastore/image?image=scan_001.nii.gz`], want: "served" },
+];

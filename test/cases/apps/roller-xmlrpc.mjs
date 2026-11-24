@@ -15,3 +15,10 @@ export default function ({ f, run, stream, ok, progs, bytes, show, root, readFil
   run(f, "another port", post("/roller-services/xmlrpc", "", call), "pass", { dport: 80 });
   run(f, "port knob", post("/roller-services/xmlrpc", "", call), "rst(roller_xmlrpc)", { dport: 80, knobs: { port: 80 } });
 }
+
+/* Sent through a firewall enforcing this policy with `pfw apply -f` (test/e2e.mjs). */
+export const e2e = ({ url }) => [
+  { name: "POST /roller-services/xmlrpc", curl: ["-H", "Content-Type: text/xml", "-d", "<methodCall/>", `${url}/roller-services/xmlrpc`], want: "cut" },
+  { name: "the same path, spelled the way Tomcat also accepts", curl: ["-d", "<methodCall/>", `${url}/roller%2dservices;a=b//xmlrp%63`], want: "cut" },
+  { name: "a weblog entry", curl: [`${url}/roller/myblog/entry/hello-world`], want: "served" },
+];

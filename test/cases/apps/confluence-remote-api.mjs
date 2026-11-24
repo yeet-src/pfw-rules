@@ -18,3 +18,11 @@ export default function ({ f, run, stream, ok, progs, bytes, show, root, readFil
   run(f, "a page whose title has rpc in it", get("/display/ENG/gRPC+and+JSON-RPC+notes"), "pass", web);
   run(f, "another port", post("/rpc/soap-axis1/confluenceservice-v2", "", env), "pass", { dport: 80 });
 }
+
+/* Sent through a firewall enforcing this policy with `pfw apply -f` (test/e2e.mjs). */
+export const e2e = ({ url }) => [
+  { name: "POST to the SOAP endpoint seen exploited", curl: ["-H", "Content-Type: text/xml", "-d", "<e/>", `${url}/plugins/servlet/soap-axis1/confluenceservice-v2`], want: "cut" },
+  { name: "the XML-RPC endpoint, with a path parameter", curl: ["-d", "<methodCall/>", `${url}/rpc;a=b/xmlrpc`], want: "cut" },
+  { name: "the dashboard", curl: [`${url}/dashboard.action`], want: "served" },
+  { name: "xmlrpc=1: the XML-RPC endpoint", knobs: { xmlrpc: 1 }, curl: ["-d", "<methodCall/>", `${url}/rpc/xmlrpc`], want: "served" },
+];

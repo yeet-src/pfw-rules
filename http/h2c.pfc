@@ -3,7 +3,7 @@
 // @cve CVE-2026-123007, CVE-2026-123633, CVE-2026-119618
 // @severity critical
 // @tags http, http2, rce, nginx, apache
-// @knob port  The port to guard.
+// @knob port  The port to guard. Streams are reassembled only on 80; see below.
 //
 // Three memory-corruption bugs in the HTTP/2 code of nginx and Apache httpd,
 // all reached by speaking HTTP/2 to the server. The vendors' workaround is to
@@ -28,7 +28,12 @@
 // It will break a port that is meant to carry cleartext HTTP/2, gRPC between
 // services above all. Do not apply it there.
 nocase;
-reassemble;
+// Reassembly is tied to port 80. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 80;
 pattern preface = "PRI * HTTP/2.0", settings = "http2-settings";
 filter {
   if (proto != 6) decide pass;

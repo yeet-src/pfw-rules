@@ -1,0 +1,90 @@
+// @description Resets requests carrying Base64 of the one shape that reaches the OpenJDK decoder bug: a 1-3 character tail, ending in padding, after whole 64-character blocks.
+// @patches OpenJDK 17.0.6 and later, 21, 25 and 27 on x86-64 with AVX-512 VBMI, before the November 2026 fixes
+// @cve CVE-2026-114938
+// @severity critical
+// @tags http, java, rce, base64, memory-corruption
+// @knob port  The port to guard. Streams are reassembled only on 8080; see below.
+//
+// Java4Shell is a write past the end of a buffer in the JVM's AVX-512 Base64
+// decoder, reached by any code that decodes Base64 from a request: Basic
+// credentials, SAML, CSRF tokens, cookies. The decoder goes wrong on one
+// shape of input, the one shirudo's java-base64 guard refuses inside the JVM:
+//
+//   - 65 characters or more, all from the Base64 alphabet,
+//   - a length that leaves 1, 2 or 3 characters after whole blocks of 64,
+//   - one or two `=` at the end, no more than that remainder.
+//
+// So the tail after the last full block is one of `=`, `A=`, `==`, `AA=` or
+// `A==`. No encoder produces that: padded Base64 is a multiple of 4 long, and
+// 64n+1, +2 and +3 are not. A JVM without the bug refuses the same input as
+// malformed. The rule therefore costs ordinary traffic nothing it could use:
+//
+//   java4shell_base64  a run of Base64 characters of that shape, counted from
+//                      the character that starts it (a space, a quote, `=`,
+//                      `&`, `.`, a line end) to its padding, with a delimiter
+//                      or the end of the request after it
+//
+// Both alphabets are taken together, `+/` and `-_`. In a query or a form the
+// characters may be percent-encoded, so an escape counts as one character and
+// `%3D` as padding.
+//
+// One thing is reset that is not an attack: a parameter whose name is exactly
+// 64 Base64 characters and whose value is empty.
+//
+// What it does not cover:
+//
+//   - A run longer than one reassembly window (4096 bytes, 2048 on older
+//     pfw). The count starts where the run starts, and once that has slid out
+//     of view the tail means nothing. A token that long gets through.
+//   - Base64 the application takes from somewhere a filter cannot follow:
+//     inside JSON \u escapes, a compressed body, a second layer of encoding.
+//   - The MIME decoder is not affected, so line-wrapped Base64 is left alone.
+//   - TLS, and a JVM that is the client of a hostile server.
+//
+// The fix is a patched JDK. Until then -XX:-UseBASE64Intrinsics removes the
+// vulnerable path from inside, and shirudo's java-base64 upatch does what
+// this does where it can see every byte. This is the copy for a host where
+// neither can be done yet.
+//
+// Plaintext HTTP/1 only: put it behind the TLS terminator.
+//
+// Reassembly is tied to port 8080. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 8080;
+// The padding has to end the token: after it comes a delimiter, never
+// another Base64 character (a 64-character name followed by `=value` is not
+// padding).
+regex tail = "[^A-Za-z0-9+/_%-](([A-Za-z0-9+/_-]|%([0-24-9a-fA-F][0-9a-fA-F]|3[0-9a-cA-Ce-fE-F])){64})+(([A-Za-z0-9+/_-]|%([0-24-9a-fA-F][0-9a-fA-F]|3[0-9a-cA-Ce-fE-F]))?(=|%3[dD])|(=|%3[dD])(=|%3[dD])|([A-Za-z0-9+/_-]|%([0-24-9a-fA-F][0-9a-fA-F]|3[0-9a-cA-Ce-fE-F]))([A-Za-z0-9+/_-]|%([0-24-9a-fA-F][0-9a-fA-F]|3[0-9a-cA-Ce-fE-F]))(=|%3[dD])|([A-Za-z0-9+/_-]|%([0-24-9a-fA-F][0-9a-fA-F]|3[0-9a-cA-Ce-fE-F]))(=|%3[dD])(=|%3[dD]))[^A-Za-z0-9+/_=%-]";
+// ...or the request ends there, with no delimiter to read. A regex cannot
+// say "the end", so these two say "such a tail is in view" and the filter
+// checks the last bytes itself. `AA=` is kept apart: `AA==` is valid, so it
+// counts only when the data ends in one `=`, not two.
+regex ends = "[^A-Za-z0-9+/_%-](([A-Za-z0-9+/_-]|%([0-24-9a-fA-F][0-9a-fA-F]|3[0-9a-cA-Ce-fE-F])){64})+(([A-Za-z0-9+/_-]|%([0-24-9a-fA-F][0-9a-fA-F]|3[0-9a-cA-Ce-fE-F]))?(=|%3[dD])|(=|%3[dD])(=|%3[dD])|([A-Za-z0-9+/_-]|%([0-24-9a-fA-F][0-9a-fA-F]|3[0-9a-cA-Ce-fE-F]))(=|%3[dD])(=|%3[dD]))";
+regex ends3 = "[^A-Za-z0-9+/_%-](([A-Za-z0-9+/_-]|%([0-24-9a-fA-F][0-9a-fA-F]|3[0-9a-cA-Ce-fE-F])){64})+([A-Za-z0-9+/_-]|%([0-24-9a-fA-F][0-9a-fA-F]|3[0-9a-cA-Ce-fE-F]))([A-Za-z0-9+/_-]|%([0-24-9a-fA-F][0-9a-fA-F]|3[0-9a-cA-Ce-fE-F]))(=|%3[dD])";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 8080) decide pass;
+  mask m = scan(payload, 4096);
+  if (any(m, tail)) decide rst("java4shell_base64", 0);
+  if (len < 3) decide pass;
+  // how the data ends: 1 for `=`, 2 for `%3D`
+  let last = u8(end - 1);
+  let pad = 0;
+  if (last == '=') pad = 1;
+  if (u8(end - 3) == '%') { if (u8(end - 2) == '3') { if (last | 0x20 == 'd') pad = 2; } }
+  if (pad == 0) decide pass;
+  if (any(m, ends)) decide rst("java4shell_base64", 0);
+  if (any(m, ends3)) {
+    // is there a second padding character before the last one?
+    let before = u8(end - 2);
+    if (pad == 2) {
+      before = 0;
+      if (len >= 6) { if (u8(end - 6) == '%') { if (u8(end - 5) == '3') { if (u8(end - 4) | 0x20 == 'd') before = '='; } } }
+    }
+    if (before != '=') decide rst("java4shell_base64", 0);
+  }
+  decide pass;
+}

