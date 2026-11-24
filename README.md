@@ -13,6 +13,37 @@ pfw apply rules:runtimes/php2shell.pfc
 pfw knob set port 8080        # each policy guards one port; this is how to say which
 ```
 
+## Which one do I need
+
+Start from what the host runs. The firewall enforces one policy at a time, so
+pick the one for the thing you cannot upgrade yet.
+
+| the host runs | policy |
+|---|---|
+| PHP, any application | `runtimes/php2shell.pfc` |
+| WordPress or Drupal | `cms/installers.pfc`; for plugins that unserialize input, `cms/php-object-injection.pfc` |
+| Node.js | `runtimes/node2shell.pfc` |
+| Java, any application | `runtimes/java4shell.pfc`; with an old Log4j, `runtimes/log4shell.pfc`; on Tomcat, `runtimes/tomcat-strict-path.pfc` |
+| Confluence Data Center | `apps/confluence-remote-api.pfc` |
+| Apache Roller | `apps/roller-xmlrpc.pfc` |
+| Nextcloud with the built-in Collabora server | `apps/nextcloud-builtin-code.pfc` |
+| a legacy ASP.NET site using Idunno.AntiCsrf | `runtimes/aspnet-anticsrf.pfc` |
+| nginx or Apache httpd with HTTP/2 or HTTP/3 on | `http/h2c.pfc`, `http/quic.pfc` |
+| LiteLLM, GPUStack or MONAI Label | the policy of that name under `ai/` |
+| any TLS listener | `tls/legacy-clients.pfc` |
+| none of these, or not sure yet | `baseline/pass.pfc`: attached and counting, blocking nothing |
+
+Then, in order:
+
+```sh
+pfw ls                          # find it, and its number
+pfw shadow                      # dry run: count what it would block, block nothing
+pfw apply NUMBER
+pfw knob set port 8080          # if the service is not on the policy's default port
+pfw status                      # "would block N": look at it under real traffic
+pfw unshadow                    # enforce
+```
+
 ## The rules
 
 Every policy resets the connection that carries what it names and passes
