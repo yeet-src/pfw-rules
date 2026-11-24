@@ -13,7 +13,8 @@ name: test
 #                 a real server; the ones a policy names must be cut off.
 #                 Needs the YEET_API_KEY secret, and is skipped without it
 #
-# The last two run in a network namespace of their own, with their own yeetd.
+# The kernel test runs in a network namespace of its own, with its own yeetd.
+# The end-to-end test runs on the runner's loopback, which is thrown away.
 
 on:
   push:
@@ -58,15 +59,25 @@ jobs:
           git -C pfw/.deps/pfw-core rev-parse HEAD
           test -f pfw/.deps/pfw-core/bin/vm.bpf.o
 
+      # yeet serves a login page in place of every route of a host that is not
+      # logged in, so driving a firewall through `pfw` takes a login. A key in
+      # the YEET_API_KEY secret gives the runner one; install.sh logs in with
+      # it. A pull request from a fork has no secrets: it installs without a
+      # login, and the end-to-end step below is skipped.
       - name: Install pfw, as a user would
+        env:
+          YEET_API_KEY: ${{ secrets.YEET_API_KEY }}
         run: |
           set -euo pipefail
           cp pfw/install.sh "$RUNNER_TEMP/install.sh"
           cd "$RUNNER_TEMP"
-          # --no-up: the installer would start the firewall on the runner's
-          # own daemon, which takes a yeet login. The end-to-end test starts
-          # it itself, on a daemon of its own inside a namespace.
-          sh ./install.sh --package "$GITHUB_WORKSPACE/pfw/pkg/pfw.tar.gz" --no-login --no-up
+          # --no-up: the end-to-end test starts the firewall itself, from a
+          # copy of the service that keeps its state in a scratch directory.
+          if [ -n "$YEET_API_KEY" ]; then
+            sh ./install.sh --package "$GITHUB_WORKSPACE/pfw/pkg/pfw.tar.gz" --no-up
+          else
+            sh ./install.sh --package "$GITHUB_WORKSPACE/pfw/pkg/pfw.tar.gz" --no-login --no-up
+          fi
           command -v pfw
           pfw --version
 
@@ -80,10 +91,9 @@ jobs:
       - name: Kernel, in a namespace of its own
         run: PFW_CORE="$PWD/pfw/.deps/pfw-core" sh test/kernel-ns.sh
 
-      # yeet serves a login page in place of every route of a host that is not
-      # logged in, so driving a firewall through `pfw` takes a login. A key in
-      # the YEET_API_KEY secret gives the test's daemon one. A pull request
-      # from a fork has no secrets: there the step is skipped, and says so.
+      # On the runner's own loopback, not in a namespace: a namespace has no
+      # route out, so nothing inside it can log in, and the runner is thrown
+      # away afterwards. The policies' own ports include 80 and 443.
       - name: End to end, with pfw
         env:
           YEET_API_KEY: ${{ secrets.YEET_API_KEY }}
@@ -92,4 +102,5 @@ jobs:
             echo "::warning::no YEET_API_KEY secret, so pfw cannot be driven here: the end-to-end test is skipped"
             exit 0
           fi
-          PFW="$(command -v pfw)" sh test/in-namespace.sh "$(command -v node)" test/e2e.mjs
+          sudo sysctl -q -w net.ipv4.ip_unprivileged_port_start=0
+          PFW="$(command -v pfw)" SCRATCH_HOME="$(mktemp -d)" node test/e2e.mjs

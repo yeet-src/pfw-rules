@@ -85,16 +85,21 @@ export const e2e = ({ url, fixture }) => [
 say. It also checks that applying the policy did not cost `pfw` its own
 control connection, and that `pfw knob set port` moves the policy.
 
-It needs a yeet login: yeet serves a login page in place of every route of a
-host that is not logged in, the firewall's control route among them. With
-`YEET_API_KEY` set the test logs its own daemon in; in CI that is a
-repository secret, and the step is skipped where there is none.
+It changes the firewall it is pointed at, so on a machine you care about run
+it through `test/in-namespace.sh`. It also runs a copy of the built service
+whose state file is moved into a scratch directory: the service saves its
+policy in `/var/lib/pfw/state.js`, which no network namespace hides, and
+without that the test would write over the saved state of the host's own
+firewall.
 
-Run it through `test/in-namespace.sh`. It changes the firewall it is pointed
-at. It also runs a copy of the built service whose state file is moved into a
-scratch directory: the service saves its policy in `/var/lib/pfw/state.js`,
-which no network namespace hides, and without that the test would write over
-the saved state of the host's own firewall.
+It needs a yeet login. yeet serves a login page in place of every route of a
+host that is not logged in, the firewall's control route among them, and
+logging in takes a route to yeet's servers that a namespace does not have. So:
+
+- in CI it runs on the runner's own loopback, logged in with the
+  `YEET_API_KEY` repository secret, and is skipped where there is none;
+- in a namespace it works with a daemon that does not ask for a login, such as
+  a development build of yeetd.
 
 ## Where the cases come from
 

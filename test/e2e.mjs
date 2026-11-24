@@ -72,11 +72,14 @@ writeFileSync(`${service}/service.toml`, toml.replace(KEEPER, `args = ["--iface"
 env.PFW_SOURCE = service;
 
 /* yeet serves a login page in place of every route of a host that is not
- * logged in, the firewall's control route among them, and the daemon in a
- * fresh namespace is not. A key in YEET_API_KEY logs it in. */
-if (process.env.YEET_API_KEY) {
-  const r = await sh(process.env.YEET || "yeet", ["login", "--key", process.env.YEET_API_KEY]);
-  console.log(r.ok ? "logged the namespace's daemon in with the key in YEET_API_KEY" : "yeet refused the key in YEET_API_KEY");
+ * logged in, the firewall's control route among them. Logging in takes a
+ * route to yeet's servers, which a namespace made by in-namespace.sh does not
+ * have: there the daemon has to be one that does not ask (a development
+ * build), and on a host with a network YEET_API_KEY logs it in. */
+const YEET = process.env.YEET || "yeet";
+if (process.env.YEET_API_KEY && !(await sh(YEET, ["whoami", "--quiet"])).ok) {
+  const r = await sh(YEET, ["login", "--key", process.env.YEET_API_KEY]);
+  console.log(r.ok ? "logged this host's daemon in with the key in YEET_API_KEY" : `yeet login --key failed: ${r.out.trim().split("\n").slice(-2).join(" | ").replaceAll(process.env.YEET_API_KEY, "<key>")}`);
 }
 
 try {
