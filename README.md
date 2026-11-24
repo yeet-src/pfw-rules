@@ -29,8 +29,29 @@ path in a verdict: `pass`, `drop`, `rst`, `ban` or `count`. A named verdict
 count packets by it. The language is documented in
 [pfw-core](https://github.com/yeet-src/pfw-core/blob/master/docs/lang.md).
 
-Put a policy under the directory for the protocol or concern it guards, and
-open it with a comment saying what it blocks and what it leaves alone.
+Open it with a block of `@key value` comments. `pfwctl ls` prints them under
+the policy, so they are how someone choosing a policy learns what it is for:
+
+```c
+// @description Resets connections that carry a JNDI lookup string.
+// @patches Apache Log4j 2.0-beta9 to 2.14.1
+// @cve CVE-2021-44228, CVE-2021-45046
+// @severity critical
+// @tags http, rce
+```
+
+| key | what it says |
+|---|---|
+| `description` | one line: what it blocks and what it leaves alone |
+| `patches` | the software and versions it shields, when it is a virtual patch |
+| `cve` | the CVEs it addresses, comma-separated |
+| `severity` | `critical`, `high`, `medium` or `low` |
+| `tags` | words to find it by, comma-separated |
+
+Only `description` is expected of every policy. The block ends at the first
+line that is not a comment; ordinary comments may follow the keys.
+
+Put a policy under the directory for the protocol or concern it guards.
 
 `pfwctl ls` compiles every policy in the repo against the running firewall,
 and `pfwctl load` refuses one that does not compile, so check there before

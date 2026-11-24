@@ -1,5 +1,7 @@
-// Pass everything. The firewall stays attached and counts what it sees, and
-// decides nothing: the policy to fall back to.
+// @description Passes everything: attached and counting, deciding nothing.
+// @tags baseline
+//
+// The policy to fall back to.
 filter {
   decide pass;
 }
