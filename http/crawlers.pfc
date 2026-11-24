@@ -1,0 +1,8 @@
+// Reset AI crawlers on :80 by user-agent, case-insensitively.
+nocase;
+pattern gptbot = "GPTBot", claudebot = "ClaudeBot", bytespider = "Bytespider";
+filter {
+  if (dport != 80) decide pass;
+  if (scan(payload, 1460) & (gptbot | claudebot | bytespider)) decide rst("crawler", 60);
+  decide pass;
+}

@@ -1,0 +1,5 @@
+// Pass everything. The firewall stays attached and counts what it sees, and
+// decides nothing: the policy to fall back to.
+filter {
+  decide pass;
+}
