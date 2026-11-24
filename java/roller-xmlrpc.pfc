@@ -29,6 +29,11 @@ regex xmlrpc = "(x|%78)(m|%6d)(l|%6c)(r|%72)(p|%70)(c|%63)";
 filter {
   if (proto != 6) decide pass;
   if (dport != knob("port") ?? 8080) decide pass;
-  if (all(scan(payload, 4096), services, xmlrpc)) decide rst("roller_xmlrpc", 0);
+  // flow.r0 remembers each segment once seen: the match mask is only this
+  // window, and Tomcat takes kilobytes of path parameter between the two.
+  mask m = scan(payload, 4096);
+  if (any(m, services)) flow.r0 = flow.r0 | 1;
+  if (any(m, xmlrpc)) flow.r0 = flow.r0 | 2;
+  if (flow.r0 == 3) decide rst("roller_xmlrpc", 0);
   decide pass;
 }

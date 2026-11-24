@@ -43,7 +43,11 @@ filter {
   let allow_xmlrpc = knob("xmlrpc") ?? 0;
   mask m = scan(payload, 4096);
   if (any(m, soap)) decide rst("axis1_soap", 0);
-  if (all(m, rpc, xmlrpc)) {
+  // flow.r0 remembers each segment once seen: the match mask is only this
+  // window, and Tomcat takes kilobytes of path parameter between the two.
+  if (any(m, rpc)) flow.r0 = flow.r0 | 1;
+  if (any(m, xmlrpc)) flow.r0 = flow.r0 | 2;
+  if (flow.r0 == 3) {
     if (allow_xmlrpc == 0) decide rst("axis1_xmlrpc", 0);
   }
   decide pass;

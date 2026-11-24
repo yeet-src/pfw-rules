@@ -1,0 +1,50 @@
+// @description Resets requests that carry a Log4j lookup: ${jndi:...} and the nested forms that hide it.
+// @patches Apache Log4j 2.0-beta9 to 2.14.1 (JNDI lookups are off from 2.16.0)
+// @cve CVE-2021-44228, CVE-2021-45046
+// @severity critical
+// @tags http, java, rce, log4j
+// @knob port      The port to guard.
+// @knob defaults  1 lets ${name:-value} through, for an app that is posted shell or template text.
+//
+// Log4j resolves ${...} in anything it logs, so the string can sit in any
+// header, the URL or the body. Three rules, each checked against what Log4j
+// 2.14.1 really resolves (test/fixtures/log4j-2.14.1-lookups.json):
+//
+//   log4shell          ${jndi, with no colon asked for: ${jndi${::-:}ldap...
+//                      resolves, the colon supplied by a lookup
+//   log4shell_lookup   ${ and a built-in lookup name: ${lower:j}, ${env:X},
+//                      ${date:'j'}, the pieces a hidden "jndi" is built from
+//   log4shell_default  ${anything:-value}: an unknown name falls back to its
+//                      default, and the name may be 300 characters, hold
+//                      spaces, colons or high bytes, so only the :- is fixed
+//
+// `$`, `{` and `:` are matched raw, percent-encoded and as JSON \u escapes,
+// the three forms a servlet container or a JSON parser turns back into the
+// character before the application logs it. An application that decodes
+// something else first (base64, a gzip body, double encoding) is not covered.
+//
+// The cost: ${HOME:-/root} in a posted shell script or a CI job definition is
+// reset (set `defaults` to 1), and so is text that quotes a lookup. Bytes
+// with no structure trip log4shell_default by chance about once in 16 MB, so
+// an app that takes large compressed uploads wants `defaults` at 1 too. A name
+// longer than a reassembly window can keep, 256 bytes, laid across a window
+// move is not seen by log4shell_default.
+//
+// Plaintext HTTP/1 only: put it behind the TLS terminator.
+nocase;
+reassemble;
+regex jndi = "(\$|%24|\\u0024)(\{|%7b|\\u007b)jndi";
+regex lookup = "(\$|%24|\\u0024)(\{|%7b|\\u007b)(lower|upper|env|sys|date|ctx|java|main|bundle|k8s|docker|web|map|sd|log4j|marker|spring|event|base64|jvmrunargs)(:|%3a|\\u003a)";
+regex dflt = "(\$|%24|\\u0024)(\{|%7b|\\u007b)[^}]*(:|%3a|\\u003a)-";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 8080) decide pass;
+  let allow_defaults = knob("defaults") ?? 0;
+  mask m = scan(payload, 4096);
+  if (any(m, jndi)) decide rst("log4shell", 0);
+  if (any(m, lookup)) decide rst("log4shell_lookup", 0);
+  if (any(m, dflt)) {
+    if (allow_defaults == 0) decide rst("log4shell_default", 0);
+  }
+  decide pass;
+}

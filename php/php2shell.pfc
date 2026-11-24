@@ -27,10 +27,9 @@
 // Apache takes a folded Transfer-Encoding value and kilobytes of padding
 // between two headers, so anything tied to one spelling or one window is
 // stepped around. The cost is that a request which only mentions
-// PHP_SESSION_UPLOAD_PROGRESS is reset, and so is a keep-alive connection that
-// carries a multipart request and, separately, a chunked one (`curl -F f=@-`
-// sends chunked multipart by itself): set `chunked` to 1 behind a proxy that
-// pools connections and re-chunks.
+// PHP_SESSION_UPLOAD_PROGRESS is reset, and so is a keep-alive connection
+// that carries a multipart request and, separately, a chunked one: set
+// `chunked` to 1 behind a proxy that pools connections and re-chunks.
 //
 // What it does not do: count parts or headers per part, which the
 // memory-exhaustion trigger also relies on (cap those at the proxy); see a
@@ -55,8 +54,9 @@ filter {
   let allow_progress = knob("progress") ?? 0;
   let allow_nesting = knob("nesting") ?? 0;
 
-  // scan, not within: the mask keeps what earlier windows of the connection
-  // held, so two headers padded a window apart are still seen together.
+  // What the connection has carried is kept in flow.r0, a bit a token: the
+  // match mask is only this window, and Apache takes the two headers with
+  // kilobytes of padding between them.
   mask m = scan(payload, 4096);
   if (any(m, progress)) {
     if (allow_progress == 0) decide rst("php2shell_progress", 0);
@@ -64,9 +64,12 @@ filter {
   if (any(m, nested, nested_enc)) {
     if (allow_nesting == 0) decide rst("php2shell_nesting", 0);
   }
-  if (any(m, multipart)) {
+  if (any(m, multipart)) flow.r0 = flow.r0 | 1;
+  if (any(m, te)) flow.r0 = flow.r0 | 2;
+  let carried = flow.r0;
+  if (carried & 1 == 1) {
     if (allow_multipart == 0) decide rst("php2shell_multipart", 0);
-    if (any(m, te)) {
+    if (carried == 3) {
       if (allow_chunked == 0) decide rst("php2shell_chunked", 0);
     }
   }
