@@ -1,0 +1,50 @@
+// @description Resets requests whose body is Brotli-compressed (Content-Encoding: br), the way in to the Node.js Brotli decoder bug.
+// @patches Node.js before 22.23.4, 24.22.1 and 26.12.1 (20 and older are end-of-life and unpatched); Bun before its October 2026 fix
+// @cve CVE-2026-111497
+// @severity critical
+// @tags http, nodejs, rce, brotli, memory-corruption
+// @knob port  The port to guard. Streams are reassembled only on 3000; see below.
+//
+// Node2Shell is memory corruption in the Brotli decoder that ships inside
+// Node.js. A server reaches it without ever calling Brotli itself: Express 5
+// and Koa inflate a request body according to its Content-Encoding, so one
+// POST with malformed Brotli is enough. Node lists no workaround. But a
+// browser never compresses what it sends, and almost no client sends `br`,
+// so the request can simply be refused:
+//
+//   node2shell_brotli  a Content-Encoding header whose whole value is `br`
+//
+// Checked against Express 5 and Koa on Node 24. Both hand the body to the
+// Brotli decoder for `br` alone: under any case of the header name, with no
+// space or with spaces and tabs around the value, after kilobytes of other
+// headers, and for JSON, form and text bodies alike. Express also takes `BR`.
+// Neither does for a list (gzip, br), a quoted value, a parameter (br;q=1),
+// the header given twice, or a folded line; those are answered 415 or 400
+// before any decoding. So the rule is exactly that one value, and gzip and
+// deflate bodies are left alone.
+//
+// What it does not cover: Node as a client. fetch() and http clients decode
+// Brotli from the servers they call, and a filter on inbound requests sees
+// none of that. Nor HTTP/2, nor anything inside TLS. A framework that
+// accepts some other spelling of the header was not found, but only these
+// two were tried.
+//
+// The cost: a client that really does send Brotli-compressed request bodies
+// is reset. Have it send gzip until Node is upgraded.
+//
+// Plaintext HTTP/1 only: put it behind the TLS terminator.
+//
+// Reassembly is tied to port 3000. A bare `reassemble;` follows every TCP
+// connection on the interface and, when the policy is applied, resets each
+// one already open, on any port. So with the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+nocase;
+reassemble 3000;
+regex brotli = "\ncontent-encoding:[ \t]*br[ \t]*[\r\n]";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 3000) decide pass;
+  if (scan(payload, 4096) & brotli) decide rst("node2shell_brotli", 0);
+  decide pass;
+}

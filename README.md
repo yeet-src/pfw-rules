@@ -51,6 +51,7 @@ A language runtime, library or server that every application on it shares.
 | policy | shields | what it resets | port |
 |---|---|---|---|
 | [`runtimes/php2shell.pfc`](runtimes/php2shell.pfc) | PHP before 8.2.35, 8.3.36, 8.4.27, 8.5.12. CVE-2026-109618, CVE-2026-109619. In CISA KEV. | The `PHP_SESSION_UPLOAD_PROGRESS` field; multipart with `Transfer-Encoding`; field names nested eight deep; optionally all multipart. | 80 |
+| [`runtimes/node2shell.pfc`](runtimes/node2shell.pfc) | Node.js before 22.23.4, 24.22.1, 26.12.1. CVE-2026-111497, the bundled Brotli decoder. In CISA KEV. | Requests whose body is Brotli-compressed: a `Content-Encoding` header whose whole value is `br`. | 3000 |
 | [`runtimes/java4shell.pfc`](runtimes/java4shell.pfc) | OpenJDK 17.0.6+, 21, 25, 27 on x86-64 with AVX-512 VBMI. CVE-2026-114938. | Base64 of the one shape that reaches the decoder bug: a 1–3 character tail ending in `=` after whole 64-character blocks. No encoder produces it. | 8080 |
 | [`runtimes/aspnet-anticsrf.pfc`](runtimes/aspnet-anticsrf.pfc) | Idunno.AntiCsrf 0.9.1, an abandoned ASP.NET library. CVE-2026-131914. Exploited; there will be no fix. | A `__CSRFTOKEN` form field holding anything but the serialized string the module itself writes. | 80 |
 | [`runtimes/log4shell.pfc`](runtimes/log4shell.pfc) | Log4j 2.0-beta9–2.14.1. CVE-2021-44228, CVE-2021-45046. | `${jndi`, `${` with a built-in lookup name, and `${name:-value}`, raw, percent-encoded or as JSON `\u` escapes. | 8080 |
@@ -130,6 +131,7 @@ The cases come from running the real software and recording what it accepts:
 | `gpustack-real-ip` | uvicorn, the server GPUStack runs on: which spellings of a header line reach the application. GPUStack was not run. |
 | `php2shell`, `php-object-injection` | PHP 8.3 under Apache 2.4: which multipart spellings its parser accepts, and which strings `unserialize()` builds an object from, by which transport. |
 | every policy | A recorded admin session on a real WordPress 7.1.5 (login, settings, a post written and edited, an upload, a comment): 25 requests, none reset by any policy. |
+| `node2shell` | Express 5 and Koa on Node 24: which `Content-Encoding` spellings reach the Brotli decoder. Only valid Brotli was sent, to a patched Node. |
 | `log4shell` | Log4j 2.14.1: which of 25 lookup spellings made the logger connect out. All 17 that did are reset. |
 | `java4shell` | The shape shirudo's `java-base64` guard refuses inside the JVM, and OpenJDK 17: its decoder refuses every form of it, and no encoder output of 1 to 5,000 bytes has it. Not run on an affected x86-64 JVM. |
 | `aspnet-anticsrf` | Mandiant's description of how the module writes its token, and real .NET Framework on a Windows runner in CI (`test/dotnet/TokenLayout.cs`): what that token looks like, that no other type looks like it, and that what follows a string is not read. The module itself was not run. |
