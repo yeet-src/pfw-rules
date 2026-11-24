@@ -62,8 +62,12 @@ jobs:
           set -euo pipefail
           cp pfw/install.sh "$RUNNER_TEMP/install.sh"
           cd "$RUNNER_TEMP"
-          sh ./install.sh --package "$GITHUB_WORKSPACE/pfw/pkg/pfw.tar.gz" --no-login
+          # --no-up: the installer would start the firewall on the runner's
+          # own daemon, which takes a yeet login. The end-to-end test starts
+          # it itself, on a daemon of its own inside a namespace.
+          sh ./install.sh --package "$GITHUB_WORKSPACE/pfw/pkg/pfw.tar.gz" --no-login --no-up
           command -v pfw
+          pfw --version
 
       - uses: actions/setup-node@v4
         with:
