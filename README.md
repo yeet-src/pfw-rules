@@ -7,8 +7,7 @@ pulled and applied with `pfwctl`.
 pfwctl remote add rules git@github.com:yeet-src/pfw-rules.git
 pfwctl pull                      # fetch, and see what changed
 pfwctl ls                        # every policy, numbered, with whether it compiles
-pfwctl load rules:http/crawlers.pfc
-pfwctl apply
+pfwctl apply rules:http/crawlers.pfc
 ```
 
 The firewall runs one policy at a time, so each `.pfc` here is a whole
@@ -60,5 +59,5 @@ line that is not a comment; ordinary comments may follow the keys.
 Put a policy under the directory for the protocol or concern it guards.
 
 `pfwctl ls` compiles every policy in the repo against the running firewall,
-and `pfwctl load` refuses one that does not compile, so check there before
+and `pfwctl apply` refuses one that does not compile, so check there before
 pushing.
