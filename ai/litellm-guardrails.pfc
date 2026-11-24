@@ -31,9 +31,7 @@
 //
 // Plaintext HTTP/1 only: put it behind the TLS terminator.
 //
-// Reassembly is tied to port 4000. A bare `reassemble;` follows every TCP
-// connection on the interface and, when the policy is applied, resets each
-// one already open, on any port. So with the `port` knob set to anything
+// Reassembly follows port 4000 only. With the `port` knob set to anything
 // else, packets are judged one at a time and a signature split across two is
 // missed: to guard another port properly, change the number here as well.
 reassemble 4000;

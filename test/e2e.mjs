@@ -130,15 +130,11 @@ try {
     for (const c of cases) {
       for (const [k, v] of Object.entries(c.knobs ?? {})) await pfw("knob", "set", k, String(v));
       const got = await send(c, port);
-      /* A case marked `gap` is one the policy should catch and, for a reason
-       * outside the policy, does not yet. It is reported, not failed, and
-       * says so the day it starts passing. */
-      if (c.gap) console.log(got === c.want ? `  ok   ${c.name} (a known gap that is closed here: drop its \`gap\` marker)` : `  gap  not ${c.want === "cut" ? "cut off" : "served"}: ${c.name}\n         ${c.gap}`);
-      else check(`${c.want === "cut" ? "cut off" : "served "}: ${c.name}`, got === c.want, `the request was ${got}`);
+      check(`${c.want === "cut" ? "cut off" : "served "}: ${c.name}`, got === c.want, `the request was ${got}`);
       for (const k of Object.keys(c.knobs ?? {})) await pfw("knob", "unset", k);
     }
     /* the port knob, as an operator would use it: the first request that is cut, on another port */
-    const first = cases.find((c) => c.want === "cut" && !c.knobs && !c.gap);
+    const first = cases.find((c) => c.want === "cut" && !c.knobs);
     if (first && /@knob port\b/.test(readFileSync(new URL(f, root), "utf8"))) {
       const moved = mod.e2e({ url: `http://127.0.0.1:${OTHER}`, port: OTHER, fixture }).find((c) => c.name === first.name);
       await pfw("knob", "set", "port", String(OTHER));

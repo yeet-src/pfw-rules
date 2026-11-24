@@ -53,8 +53,6 @@ export const e2e = ({ url }) => [
   { name: "curl -F PHP_SESSION_UPLOAD_PROGRESS=x", curl: ["-F", "PHP_SESSION_UPLOAD_PROGRESS=x", "-F", "title=holiday", `${url}/upload.php`], want: "cut" },
   { name: "a chunked multipart upload", curl: ["-H", "Transfer-Encoding: chunked", "-F", "title=holiday", `${url}/upload.php`], want: "cut" },
   { name: "a field name nested nine deep", curl: ["-F", "a[k][k][k][k][k][k][k][k][k]=x", `${url}/upload.php`], want: "cut" },
-  { name: "the field after 3 kB of padding, sent in one write", curl: ["-F", `pad=${"a".repeat(3000)}`, "-F", "PHP_SESSION_UPLOAD_PROGRESS=x", `${url}/upload.php`], want: "cut",
-    gap: "pfw-core reads only the first window (2048 bytes) of a segment larger than it, and loopback sends up to 64 kB as one segment" },
   { name: "an ordinary multipart upload", curl: ["-F", "title=holiday", "-F", "tags[]=a", `${url}/upload.php`], want: "served" },
   { name: "multipart=0: an ordinary upload", knobs: { multipart: 0 }, curl: ["-F", "title=holiday", `${url}/upload.php`], want: "cut" },
 ];

@@ -20,8 +20,7 @@ states where the released one holds 1,024.
 Runs each policy in pfw-core's reference interpreter, which executes the same
 bytecode as the kernel over exactly the bytes it is handed. It checks that
 
-- every `.pfc` compiles, without warnings, to an automaton small enough to
-  load, and opens with `@description`;
+- every `.pfc` compiles, without warnings, and opens with `@description`;
 - every policy has a cases file, and the cases pass;
 - every captured request in `test/fixtures/*.http` passes every policy, whole
   and cut into 1460-byte segments.
@@ -84,9 +83,7 @@ export const e2e = ({ url, fixture }) => [
 ```
 
 `curl` gives a request as a real client would; `raw` is for what curl cannot
-say, and `udp` sends one datagram. A case with a `gap` string is one the
-policy should catch but cannot yet for a reason outside it: it is reported,
-not failed, and says so once it passes. It also checks that applying the policy did not cost `pfw` its own
+say, and `udp` sends one datagram. It also checks that applying the policy did not cost `pfw` its own
 control connection, and that `pfw knob set port` moves the policy.
 
 It changes the firewall it is pointed at, so on a machine you care about run

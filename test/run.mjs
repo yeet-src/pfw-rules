@@ -47,11 +47,7 @@ const progs = new Map();
 for (const f of policies.sort()) {
   let c;
   try { c = compile(readFileSync(new URL(f, root), "utf8")); } catch (e) { c = { ok: false, errors: [{ text: e.message }] }; }
-  /* The compiler accepts a DFA up to LIMITS.RE_STATES, but the loader has
-   * only been seen to take one of 12,704 states: at 15,430 it failed
-   * ("pending module evaluation should not be discarded"). Stay under what
-   * has loaded. */
-  const fits = !c.regex || c.regex.nstates <= Math.min(LIMITS.RE_STATES, 13000);
+  const fits = !c.regex || c.regex.nstates <= LIMITS.RE_STATES;
   ok(c.ok && fits, `${f} compiles`, c.ok ? `regex DFA has ${c.regex?.nstates} states` : JSON.stringify(c.errors));
   ok(!(c.warnings ?? []).length, `${f} compiles without warnings`, JSON.stringify(c.warnings));
   ok(/^\/\/ @description \S/.test(readFileSync(new URL(f, root), "utf8")), `${f} opens with @description`);

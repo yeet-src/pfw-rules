@@ -23,9 +23,8 @@
 // module calls it when its <csrfSettings> element is left out. __CSRFTOKEN
 // and the four opening characters are matched raw or percent-encoded, and a
 // value that opens with whitespace is reset: the decoder skips it, a browser
-// never sends it. RaiseException is matched only as written: with its letters
-// percent-encoded too the automaton outgrows the kernel's regex table, so on
-// a site with no <csrfSettings> that spelling gets through.
+// never sends it. RaiseException is matched only as written, so on a site
+// with no <csrfSettings> a percent-encoded spelling of that name gets through.
 //
 // What it rests on: the token layout is Microsoft's documented one (the same
 // `/wE` every ViewState opens with), and the decoder's tolerance of
@@ -36,9 +35,7 @@
 //
 // Plaintext HTTP/1 only: put it behind the TLS terminator.
 nocase;
-// Reassembly is tied to port 80. A bare `reassemble;` follows every TCP
-// connection on the interface and, when the policy is applied, resets each
-// one already open, on any port. So with the `port` knob set to anything
+// Reassembly follows port 80 only. With the `port` knob set to anything
 // else, packets are judged one at a time and a signature split across two is
 // missed: to guard another port properly, change the number here as well.
 reassemble 80;

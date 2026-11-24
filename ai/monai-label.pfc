@@ -28,16 +28,13 @@
 //
 // One gap: a query padded past what a reassembly window keeps when it moves,
 // 256 bytes, with the traversal laid on the far side of that move, is not
-// seen. A length cap would close it, but its automaton is larger than the
-// kernel's regex table.
+// seen.
 //
 // Plaintext HTTP/1 only. The server is also unsafe on any network it should
 // not be on: the vendor's advice is to turn authentication on
 // (MONAI_LABEL_AUTH_ENABLE=True) and not expose it.
 nocase;
-// Reassembly is tied to port 8000. A bare `reassemble;` follows every TCP
-// connection on the interface and, when the policy is applied, resets each
-// one already open, on any port. So with the `port` knob set to anything
+// Reassembly follows port 8000 only. With the `port` knob set to anything
 // else, packets are judged one at a time and a signature split across two is
 // missed: to guard another port properly, change the number here as well.
 reassemble 8000;

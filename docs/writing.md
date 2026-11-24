@@ -67,26 +67,15 @@ quoted, single-quoted or bare. Log4j resolves `${jndi${::-:}ldap…}`, which has
 no `jndi:` in it. A literal copied from a write-up is stepped around by the
 first person who tries. Run the real software and ask it.
 
-**Never a bare `reassemble;`.** Without a port it follows every TCP connection
-on the interface, and a connection first seen half-way is reset. Applying
-such a policy cut every connection already open on the host, on any port,
-`pfw`'s own control connection included (so `pfw apply` reported a failure it
-had not had), and on loopback the resets fed themselves into a storm. Write
-`reassemble 80;`, the same number as the `port` knob's default, and say in
-the comments that the knob alone does not move reassembly.
+**Tie reassembly to the port.** Write `reassemble 80;`, the same number as
+the `port` knob's default, never a bare `reassemble;`: a policy should follow
+only the connections it guards. Say in the comments that the knob alone does
+not move reassembly.
 
-**A segment larger than the window is only partly read.** The window is 2,048
-bytes in pfw-core as released, and of a single segment longer than that only
-the first 2,048 bytes are inspected. On a network card segments are about
-1,500 bytes; on loopback, with its 64 kB MTU and segmentation offload, one
-`write` is one segment. No policy can fix this from inside; the README says
-what an operator must set on `lo`, and the end-to-end test carries a case
-marked `gap` that will say when pfw-core has closed it.
-
-**The match mask is one window.** In the kernel, `scan` reports what is in the
-current reassembly window, not what the connection has carried. Two tokens
-that a client can put kilobytes apart (two headers, two path segments) each
-set a bit in `flow.r0`; see `apps/roller-xmlrpc.pfc`.
+**Remember tokens yourself.** `scan` reports what is in the current
+reassembly window. Two tokens that a client can put kilobytes apart (two
+headers, two path segments) each set a bit in `flow.r0`; see
+`apps/roller-xmlrpc.pfc`.
 
 **A match that can be stretched can be split.** When the window moves it keeps
 its last 256 bytes. A regex such as `route[^ ]*bad` is not seen if a client
@@ -95,17 +84,12 @@ remembered separately, or the policy says in its comments that the gap exists.
 
 **Counted repeats are expensive.** `prefix[^ ]{200}` is exponential when the
 prefix can occur inside the run, and does not compile. An unbounded `*` is
-cheap. `test/run.mjs` fails a policy whose automaton is larger than one the
-kernel has been seen to load.
+cheap.
 
 **Bodies are noise.** A pattern short enough to occur by chance will, in an
 upload: `log4shell_default` trips on random bytes about once in 16 MB. Tie a
 rule to the request line where the bug allows it (an upper-case method, a
 target that starts with `/`), and measure the rest.
-
-**`after()` is for literals.** It returns 0 for a `regex`, so a regex match
-has no position to compare with `end`. To ask "does the data end here", read
-the last bytes directly: `u8(end - 1)`.
 
 **`ban` bans an address.** Behind a proxy or a NAT that address is everyone.
 The policies here reset the connection and leave the source alone.
