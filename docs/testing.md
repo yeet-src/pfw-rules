@@ -84,7 +84,9 @@ export const e2e = ({ url, fixture }) => [
 ```
 
 `curl` gives a request as a real client would; `raw` is for what curl cannot
-say. It also checks that applying the policy did not cost `pfw` its own
+say, and `udp` sends one datagram. A case with a `gap` string is one the
+policy should catch but cannot yet for a reason outside it: it is reported,
+not failed, and says so once it passes. It also checks that applying the policy did not cost `pfw` its own
 control connection, and that `pfw knob set port` moves the policy.
 
 It changes the firewall it is pointed at, so on a machine you care about run

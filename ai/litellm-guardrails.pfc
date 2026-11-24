@@ -13,21 +13,31 @@
 // guardrails already configured keep running.
 //
 // Checked against FastAPI on uvicorn, the stack LiteLLM runs on: the route
-// matches only this exact path (no //, no ;parameters, no other case), but
-// percent-decoded first, the slash and underscore included, so every
-// character is matched in either form. The match is tied to the request
-// line, `POST ` and whatever root path the proxy is served under, because a
-// proxy for language models carries prompts that may well quote the path.
+// matches only this exact path (no //, no ;parameters, no other case) and
+// only the method POST in capitals, but percent-decoded first, the slash and
+// underscore included, so every character of the path is matched in either
+// form.
+//
+// A proxy for language models carries prompts, and a prompt may well quote
+// this path: "block POST /guardrails/test_custom_code at your proxy" is the
+// advisory's own sentence. So the match is a whole request line and nothing
+// less: POST in capitals, the path, an optional query, then ` HTTP/1.` and
+// the end of the line. Prose in a body has no such line; inside JSON a line
+// end is two characters, a backslash and an n.
+//
+//   litellm_guardrail_test  that request line; or the path with a query of
+//                           120 bytes or more, so the end of the line cannot
+//                           be pushed out of sight with padding
 //
 // Plaintext HTTP/1 only: put it behind the TLS terminator.
-nocase;
+//
 // Reassembly is tied to port 4000. A bare `reassemble;` follows every TCP
 // connection on the interface and, when the policy is applied, resets each
 // one already open, on any port. So with the `port` knob set to anything
 // else, packets are judged one at a time and a signature split across two is
 // missed: to guard another port properly, change the number here as well.
 reassemble 4000;
-regex tester = "post [^ ?\r\n]*(/|%2f)(g|%67)(u|%75)(a|%61)(r|%72)(d|%64)(r|%72)(a|%61)(i|%69)(l|%6c)(s|%73)(/|%2f)(t|%74)(e|%65)(s|%73)(t|%74)(_|%5f)(c|%63)(u|%75)(s|%73)(t|%74)(o|%6f)(m|%6d)(_|%5f)(c|%63)(o|%6f)(d|%64)(e|%65)";
+regex tester = "POST [^ ?\r\n]*(/|%2[fF])(g|%67)(u|%75)(a|%61)(r|%72)(d|%64)(r|%72)(a|%61)(i|%69)(l|%6[cC])(s|%73)(/|%2[fF])(t|%74)(e|%65)(s|%73)(t|%74)(_|%5[fF])(c|%63)(u|%75)(s|%73)(t|%74)(o|%6[fF])(m|%6[dD])(_|%5[fF])(c|%63)(o|%6[fF])(d|%64)(e|%65)( HTTP/1\.[01]\r?\n|\?([^ \r\n]{120}|[^ \r\n]* HTTP/1\.[01]\r?\n))";
 filter {
   if (proto != 6) decide pass;
   if (dport != knob("port") ?? 4000) decide pass;

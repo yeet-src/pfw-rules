@@ -33,9 +33,9 @@
 //
 // What it does not cover:
 //
-//   - A run longer than one reassembly window (4096 bytes, 2048 on older
-//     pfw). The count starts where the run starts, and once that has slid out
-//     of view the tail means nothing. A token that long gets through.
+//   - A run longer than one reassembly window: 2048 bytes in pfw-core as
+//     released. The count starts where the run starts, and once that has slid
+//     out of view the tail means nothing. A token that long gets through.
 //   - Base64 the application takes from somewhere a filter cannot follow:
 //     inside JSON \u escapes, a compressed body, a second layer of encoding.
 //   - The MIME decoder is not affected, so line-wrapped Base64 is left alone.

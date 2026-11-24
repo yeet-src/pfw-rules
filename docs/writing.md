@@ -75,6 +75,14 @@ had not had), and on loopback the resets fed themselves into a storm. Write
 `reassemble 80;`, the same number as the `port` knob's default, and say in
 the comments that the knob alone does not move reassembly.
 
+**A segment larger than the window is only partly read.** The window is 2,048
+bytes in pfw-core as released, and of a single segment longer than that only
+the first 2,048 bytes are inspected. On a network card segments are about
+1,500 bytes; on loopback, with its 64 kB MTU and segmentation offload, one
+`write` is one segment. No policy can fix this from inside; the README says
+what an operator must set on `lo`, and the end-to-end test carries a case
+marked `gap` that will say when pfw-core has closed it.
+
 **The match mask is one window.** In the kernel, `scan` reports what is in the
 current reassembly window, not what the connection has carried. Two tokens
 that a client can put kilobytes apart (two headers, two path segments) each

@@ -95,6 +95,25 @@ on the hop behind the TLS terminator. It sees nothing on a TLS port, over
 HTTP/2, on a FastCGI socket or on an AJP port. `tls/legacy-clients.pfc` is the
 exception: it reads the one part of TLS that is in the clear, the handshake.
 
+**On loopback, lower the MTU and turn offload off first.** pfw-core reads the
+first 2,048 bytes of a TCP segment and no more. A network card delivers
+segments of about 1,500 bytes, so nothing is missed there. Loopback delivers
+up to 64 kB as one segment, and what lies past the first 2,048 bytes of it is
+not inspected: with php2shell enforcing on `lo`, a request with 1,800 bytes of
+padding before the field it resets was served. That is the hop these policies
+are usually put on, behind a TLS terminator on the same host. Until pfw-core
+reads the whole segment, make loopback behave like a network card:
+
+```sh
+ip link set lo mtu 1500
+ethtool -K lo tso off gso off
+```
+
+With both set, the same request was reset at every padding size tried; with
+either one alone it was not. Neither setting survives a reboot by itself.
+The firewall does not warn about a segment it only partly read: the sign is
+a truncation count in its metrics.
+
 **Applying one resets the connections it guards.** Connections already open
 on the policy's port are reset when it is applied, because a stream first seen
 half-way cannot be judged. Connections on other ports are not touched.
