@@ -1,0 +1,37 @@
+// @description Drops QUIC handshakes, so HTTP/3 never starts and clients use HTTP/2 or HTTP/1.1 over TCP instead.
+// @patches nginx 1.25.0 to 1.31.8 with HTTP/3 enabled (fixed in 1.31.9 and 1.30.7); any server whose HTTP/3 stack cannot be patched yet
+// @cve CVE-2026-121810
+// @severity high
+// @tags http, http3, quic, udp, nginx
+// @knob port  The UDP port to guard.
+//
+// One of the five nginx bugs disclosed in November 2026 is a use-after-free
+// in its HTTP/3 code, reached by speaking QUIC to the server. The vendor's
+// workaround is to turn HTTP/3 off. This does that from outside: a QUIC
+// connection opens with long-header packets, and without them it never
+// exists.
+//
+//   quic_handshake  a UDP datagram to the port whose first byte has the two
+//                   top bits set: a QUIC long header (Initial, 0-RTT,
+//                   Handshake, Retry), in version 1 or 2
+//
+// Checked against the Initial packet curl 8 sends with --http3-only
+// (test/fixtures/quic-initial-curl.bin, first byte 0xcf). Other UDP on the
+// port is left alone: DTLS and STUN open with a low byte, RTP with 10 in the
+// top bits, not 11.
+//
+// A client told about HTTP/3 by an Alt-Svc header tries QUIC, gets no answer,
+// and carries on over TCP; that fallback is how browsers behave and was not
+// tested here. The first attempt costs it a timeout, so also stop advertising
+// HTTP/3 (drop the Alt-Svc header, or `http3 off`) when you can.
+//
+// It drops rather than resets: UDP has no reset. TCP on the port, which is
+// HTTP/1.1 and HTTP/2 over TLS, is not touched; for the HTTP/2 bugs disclosed
+// with this one see http/h2c.pfc.
+filter {
+  if (proto != 17) decide pass;
+  if (dport != knob("port") ?? 443) decide pass;
+  if (len == 0) decide pass;
+  if (u8(payload) & 0xc0 == 0xc0) decide drop("quic_handshake");
+  decide pass;
+}

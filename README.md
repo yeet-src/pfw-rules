@@ -16,7 +16,8 @@ pfw knob set port 8080        # each policy guards one port; this is how to say 
 ## The rules
 
 Every policy resets the connection that carries what it names and passes
-everything else. None of them bans a source address.
+everything else (the one about UDP drops instead). None of them bans a source
+address.
 
 ### Applications
 
@@ -60,6 +61,7 @@ A language runtime, library or server that every application on it shares.
 | policy | shields | what it resets | port |
 |---|---|---|---|
 | [`http/h2c.pfc`](http/h2c.pfc) | nginx 1.9.5–1.31.8 and Apache httpd 2.4.55–2.4.70 with HTTP/2. CVE-2026-123007, CVE-2026-123633, CVE-2026-119618. | Cleartext HTTP/2: the client preface and the `Upgrade: h2c` handshake. | 80 |
+| [`http/quic.pfc`](http/quic.pfc) | nginx 1.25.0–1.31.8 with HTTP/3 enabled. CVE-2026-121810. | QUIC handshakes over UDP, so HTTP/3 never starts and clients use TCP. It drops; UDP has no reset. | 443/udp |
 | [`http/crawlers.pfc`](http/crawlers.pfc) | A site that does not want to be crawled for training. | Requests from GPTBot, ClaudeBot and Bytespider, by user-agent. | 80 |
 
 ### TLS
@@ -133,6 +135,7 @@ The cases come from running the real software and recording what it accepts:
 | `aspnet-anticsrf` | Mandiant's description of how the module writes its token, and real .NET Framework on a Windows runner in CI (`test/dotnet/TokenLayout.cs`): what that token looks like, that no other type looks like it, and that what follows a string is not read. The module itself was not run. |
 | `monai-label`, `litellm-guardrails` | FastAPI on uvicorn, the stack both run on: how paths are routed and queries decoded. Neither product was run. |
 | `h2c` | nginx 1.27 and httpd 2.4.71 with cleartext HTTP/2 enabled. |
+| `quic` | The QUIC Initial packet a real curl sends with `--http3-only`. That a refused client falls back to TCP was not tested. |
 | `legacy-clients` | The ClientHellos twelve real client stacks send: openssl 3.6, curl on macOS, Alpine and CentOS 7, BusyBox wget, Go, Java 17, node, python. Only macOS's curl offers a weak suite. |
 
 No policy has been run against an exploit on a vulnerable build. What is

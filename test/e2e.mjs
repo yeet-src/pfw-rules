@@ -10,9 +10,11 @@
  * daemon are its own. PFW defaults to the `pfw` on PATH.
  *
  * Each policy's requests are the `e2e` export of its cases file: a curl
- * command where curl can say it, raw bytes where it cannot (a TLS hello).
+ * command where curl can say it, raw bytes where it cannot (a TLS hello), a
+ * UDP datagram for a policy about UDP.
  */
 import net from "node:net";
+import dgram from "node:dgram";
 import { execFile } from "node:child_process";
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, mkdirSync, cpSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -37,6 +39,13 @@ const check = (name, cond, detail) => { n++; if (!cond) fail++; console.log(`  $
 const answer = (s) => { let t; s.on("data", () => { clearTimeout(t); t = setTimeout(() => s.end("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\nConnection: close\r\n\r\nok\n"), 150); }); s.on("error", () => {}); };
 const servers = new Map();
 async function serve(port) { if (!servers.has(port)) { const srv = net.createServer(answer); await new Promise((res, rej) => { srv.once("error", rej); srv.listen(port, "127.0.0.1", res); }); servers.set(port, srv); } return `http://127.0.0.1:${port}`; }
+/* The same for UDP: an echo, so a datagram that arrives is answered. */
+const echoes = new Map();
+async function echo(port) { if (!echoes.has(port)) { const u = dgram.createSocket("udp4"); u.on("message", (m, r) => u.send(m.subarray(0, 8), r.port, r.address)); u.on("error", () => {}); await new Promise((res) => u.bind(port, "127.0.0.1", res)); echoes.set(port, u); } }
+function udp(port, bytes) {
+  return new Promise((res) => { const u = dgram.createSocket("udp4"); const fin = (v) => { try { u.close(); } catch {} res(v); };
+    u.on("message", () => fin("served")); u.on("error", () => fin("cut")); u.send(Buffer.from(bytes), port, "127.0.0.1"); setTimeout(() => fin("cut"), 1500); });
+}
 /* a second port, for showing that `pfw knob set port` moves a policy */
 const OTHER = 18473;
 
@@ -116,9 +125,11 @@ try {
     const url = await serve(port);
     const fixture = (name) => readFileSync(new URL(`test/fixtures/${name}`, root));
     const cases = mod.e2e({ url, port, fixture });
+    if (cases.some((c) => c.udp)) { await echo(port); await echo(OTHER); }
+    const send = (c, p) => (c.curl ? curl(c.curl) : c.udp ? udp(p, c.udp) : raw(p, c.raw));
     for (const c of cases) {
       for (const [k, v] of Object.entries(c.knobs ?? {})) await pfw("knob", "set", k, String(v));
-      const got = c.curl ? await curl(c.curl) : await raw(port, c.raw);
+      const got = await send(c, port);
       check(`${c.want === "cut" ? "cut off" : "served "}: ${c.name}`, got === c.want, `the request was ${got}`);
       for (const k of Object.keys(c.knobs ?? {})) await pfw("knob", "unset", k);
     }
@@ -126,7 +137,6 @@ try {
     const first = cases.find((c) => c.want === "cut" && !c.knobs);
     if (first && /@knob port\b/.test(readFileSync(new URL(f, root), "utf8"))) {
       const moved = mod.e2e({ url: `http://127.0.0.1:${OTHER}`, port: OTHER, fixture }).find((c) => c.name === first.name);
-      const send = (c, p) => (c.curl ? curl(c.curl) : raw(p, c.raw));
       await pfw("knob", "set", "port", String(OTHER));
       check(`pfw knob set port ${OTHER}: cut off there`, (await send(moved, OTHER)) === "cut");
       check(`pfw knob set port ${OTHER}: port ${port} is left alone`, (await send(first, port)) === "served");
@@ -141,6 +151,7 @@ try {
   await sh(PFW, ["clear"]);
   await sh(PFW, ["down"]);
   for (const srv of servers.values()) srv.close();
+  for (const u of echoes.values()) u.close();
 }
 
 console.log(`\n${n - fail}/${n} passed`);
