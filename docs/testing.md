@@ -44,9 +44,11 @@ export default function ({ f, run, stream, get, post }) {
 the connection's state carried between them. Keep segments no larger than a
 real one (1460 bytes): the interpreter does not reassemble.
 
-The fixtures are what curl, python-requests, wget and node's `fetch` really
-sent to a listener, byte for byte. Add to them when a policy touches a kind of
-request they do not hold.
+The fixtures are what real clients sent to a listener, byte for byte: curl,
+python-requests, wget and node's `fetch`; an admin session on a real
+WordPress, recorded through a proxy (`wordpress-*.http`); and the ClientHellos
+of a dozen TLS stacks. Add to them when a policy touches a kind of request
+they do not hold.
 
 ## The kernel: `test/kernel-ns.sh`
 

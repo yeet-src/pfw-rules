@@ -15,6 +15,9 @@ name: test
 #
 # The kernel test runs in a network namespace of its own, with its own yeetd.
 # The end-to-end test runs on the runner's loopback, which is thrown away.
+#
+# A second job asks real .NET Framework, on Windows, what the token that
+# runtimes/aspnet-anticsrf.pfc lets through actually looks like.
 
 on:
   push:
@@ -33,9 +36,9 @@ jobs:
   policies:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: yeet-src/pfw
           path: pfw
@@ -53,7 +56,14 @@ jobs:
       - name: Build pfw, and the pfw-core it embeds
         run: |
           set -euo pipefail
-          make -C pfw
+          # The build fetches the yeet toolchain through GitHub's API, which
+          # now and then answers a runner's shared address with 403.
+          for attempt in 1 2 3 4; do
+            make -C pfw && break
+            [ "$attempt" -lt 4 ] || exit 1
+            echo "::notice::the pfw build failed (attempt $attempt): trying again in a minute"
+            sleep 60
+          done
           make -C pfw pkg
           git -C pfw rev-parse HEAD
           git -C pfw/.deps/pfw-core rev-parse HEAD
@@ -81,7 +91,7 @@ jobs:
           command -v pfw
           pfw --version
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '24'
 
@@ -104,3 +114,20 @@ jobs:
           fi
           sudo sysctl -q -w net.ipv4.ip_unprivileged_port_start=0
           PFW="$(command -v pfw)" SCRATCH_HOME="$(mktemp -d)" node test/e2e.mjs
+
+  # runtimes/aspnet-anticsrf.pfc lets through one shape of token and resets
+  # every other. Whether that shape is the one the module really writes is a
+  # question about Microsoft's .NET Framework, so it is asked there.
+  anticsrf-token-layout:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: What ObjectStateFormatter really writes
+        shell: pwsh
+        run: |
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          & $csc /nologo /r:System.Web.dll /out:layout.exe test\dotnet\TokenLayout.cs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\layout.exe
+          exit $LASTEXITCODE

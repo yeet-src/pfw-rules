@@ -20,14 +20,17 @@
 //                       alignment
 //
 // The record header of a modern hello still says 0x0301; that is not the
-// client's version and is ignored. Checked against the hellos openssl 3.6,
-// curl, python and node really send (test/fixtures/clienthello-*.bin): the
-// current ones pass and openssl -tls1 and -tls1_1 are reset.
+// client's version and is ignored. Checked against the hellos real clients
+// send (test/fixtures/clienthello-*.bin): openssl 3.6, curl on Alpine and on
+// CentOS 7, BusyBox wget, Go 1.23, Java 17, node and python all pass, and
+// openssl -tls1 and -tls1_1 are reset.
 //
-// The suite rule is off unless asked for because offering is not using: the
-// curl that ships with macOS (8.7.1 on LibreSSL 3.3.6) still lists four RC4
-// suites after forty modern ones, and a server that would never pick them
-// loses that client if the rule is on. Turn it on where the clients are known.
+// The suite rule is off unless asked for, because offering is not using. Of
+// twelve client stacks captured, eleven offer no NULL, RC4 or EXPORT suite at
+// all. The twelfth is the curl that ships with macOS (8.7.1 on LibreSSL
+// 3.3.6), which still lists four RC4 suites after forty modern ones: a server
+// that would never pick them loses every Mac's curl if the rule is on. Turn
+// it on where the clients are known.
 //
 // It reads the first segment of the hello, where these fields are. A client
 // that splits its hello before the suite list is not judged, and what is not

@@ -1,0 +1,13 @@
+POST /?rest_route=/wp/v2/posts/10&_locale=user HTTP/1.1
+Host: 127.0.0.1:57726
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0
+Accept: text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8
+Accept-Language: en-GB,en;q=0.5
+Connection: close
+Content-Type: application/json
+X-WP-Nonce: 2457f63f50
+Referer: http://127.0.0.1:57726/wp-admin/post-new.php
+Cookie: wordpress_test_cookie=WP%20Cookie%20check; wordpress_f04b1a305d63a20f37d66ad8eb408ccd=admin%7C1795728893%7CEpviu0cSG9aRpq7nfKeYT4XcL29bwfm1oaIQOJRuIgD%7C778e10587982e1e5258510d7b5a66eb5d41cb3cf0fd7fe98fc75ec770eb69050; wordpress_logged_in_f04b1a305d63a20f37d66ad8eb408ccd=admin%7C1795728893%7CEpviu0cSG9aRpq7nfKeYT4XcL29bwfm1oaIQOJRuIgD%7Cd8a81089ed51b644211306747034a346dead6ed300c7c127b86b3af6cb56fc00; wp-settings-1=deleted; wp-settings-time-1=1795556093
+Content-Length: 73
+
+{"excerpt":"An excerpt; with punctuation: yes.","tags":[],"sticky":false}

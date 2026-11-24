@@ -127,16 +127,24 @@ The cases come from running the real software and recording what it accepts:
 | `installers`, `nextcloud-builtin-code` | Apache 2.4 with mod_php, which the official Drupal, WordPress and Nextcloud images run: which path spellings execute a PHP file. None of the three products was run, and nginx with PHP-FPM was not checked. The WordPress half follows CISA's and Wordfence's description; the vendor names no path. |
 | `gpustack-real-ip` | uvicorn, the server GPUStack runs on: which spellings of a header line reach the application. GPUStack was not run. |
 | `php2shell`, `php-object-injection` | PHP 8.3 under Apache 2.4: which multipart spellings its parser accepts, and which strings `unserialize()` builds an object from, by which transport. |
+| every policy | A recorded admin session on a real WordPress 7.1.5 (login, settings, a post written and edited, an upload, a comment): 25 requests, none reset by any policy. |
 | `log4shell` | Log4j 2.14.1: which of 25 lookup spellings made the logger connect out. All 17 that did are reset. |
 | `java4shell` | The shape shirudo's `java-base64` guard refuses inside the JVM, and OpenJDK 17: its decoder refuses every form of it, and no encoder output of 1 to 5,000 bytes has it. Not run on an affected x86-64 JVM. |
-| `aspnet-anticsrf` | Mandiant's description of the token the module writes, and Microsoft's serialization format. The module was not run; Mono's decoder confirmed only how whitespace is treated. |
+| `aspnet-anticsrf` | Mandiant's description of how the module writes its token, and real .NET Framework on a Windows runner in CI (`test/dotnet/TokenLayout.cs`): what that token looks like, that no other type looks like it, and that what follows a string is not read. The module itself was not run. |
 | `monai-label`, `litellm-guardrails` | FastAPI on uvicorn, the stack both run on: how paths are routed and queries decoded. Neither product was run. |
 | `h2c` | nginx 1.27 and httpd 2.4.71 with cleartext HTTP/2 enabled. |
-| `legacy-clients` | The ClientHellos openssl 3.6, curl, python and node really send. |
+| `legacy-clients` | The ClientHellos twelve real client stacks send: openssl 3.6, curl on macOS, Alpine and CentOS 7, BusyBox wget, Go, Java 17, node, python. Only macOS's curl offers a weak suite. |
 
 No policy has been run against an exploit on a vulnerable build. What is
 shown is that each resets the request shapes the software accepts and the
 advisory describes.
+
+## What is not covered yet
+
+`node tools/kev.mjs` compares the `@cve` lines here with CISA's Known Exploited
+Vulnerabilities catalogue and lists the recent entries no policy covers. An
+entry is a candidate when the software can be run and its advisory names a
+request, a path or a header; many name nothing.
 
 ## More
 
