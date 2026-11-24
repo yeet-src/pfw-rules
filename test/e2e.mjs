@@ -25,10 +25,10 @@ mkdirSync(home, { recursive: true });
 /* pfw keeps its settings under HOME: give it a scratch one. */
 const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: `${home}/.config`, XDG_CACHE_HOME: `${home}/.cache`, NO_COLOR: "1" };
 
-const sh = (cmd, args, opts = {}) => new Promise((res) => execFile(cmd, args, { env, timeout: 60000, encoding: "utf8", ...opts }, (err, stdout, stderr) => res({ ok: !err, code: err?.code ?? 0, out: `${stdout}${stderr}` })));
+const sh = (cmd, args, opts = {}) => new Promise((res) => execFile(cmd, args, { env, timeout: 60000, encoding: "utf8", ...opts }, (err, stdout, stderr) => res({ ok: !err, code: err ? (err.killed ? `killed by ${err.signal}` : err.code) : 0, out: `${stdout}${stderr}` })));
 const pfw = async (...args) => { const r = await sh(PFW, args); if (!r.ok) throw new Error(`pfw ${args.join(" ")} failed:\n${r.out}`); return r.out; };
 
-let fail = 0, n = 0;
+let fail = 0, n = 0, shown = false;
 const check = (name, cond, detail) => { n++; if (!cond) fail++; console.log(`  ${cond ? "ok  " : "FAIL"} ${name}${!cond && detail ? ": " + detail : ""}`); };
 
 /* A server that answers anything with a page, once the client has gone quiet
@@ -88,7 +88,8 @@ try {
     if (typeof mod.e2e !== "function") continue;
 
     const applied = await sh(PFW, ["apply", "-f", new URL(f, root).pathname]);
-    check("pfw apply -f accepts it", applied.ok, applied.out.trim().split("\n").slice(-3).join(" | "));
+    check("pfw apply -f accepts it", applied.ok, `exit ${applied.code}: ${applied.out.trim().split("\n").slice(-6).join(" | ") || "(no output)"}`);
+    if (!applied.ok && !shown) { shown = true; for (const args of [["--version"], ["status"], ["doctor"]]) console.log(`    pfw ${args.join(" ")}:\n${(await sh(PFW, args)).out.replace(/^/gm, "      ")}`); }
     if (/saved for restarts at/.test(applied.out) && !applied.out.includes(stateFile)) throw new Error(`the service is saving its state outside the scratch directory: ${applied.out.trim().split("\n").pop()}`);
     if (!applied.ok) continue;
     check("pfw status says it is enforcing", /enforcing/.test(await pfw("status")));
