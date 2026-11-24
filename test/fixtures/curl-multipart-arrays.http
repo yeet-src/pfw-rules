@@ -1,0 +1,20 @@
+POST /save.php HTTP/1.1
+Host: 127.0.0.1:55776
+User-Agent: curl/8.7.1
+Accept: */*
+Content-Length: 374
+Content-Type: multipart/form-data; boundary=------------------------aaq9NTQK0xjrzUi76VOXTB
+
+--------------------------aaq9NTQK0xjrzUi76VOXTB
+Content-Disposition: form-data; name="user[address][city]"
+
+Oslo
+--------------------------aaq9NTQK0xjrzUi76VOXTB
+Content-Disposition: form-data; name="tags[]"
+
+a
+--------------------------aaq9NTQK0xjrzUi76VOXTB
+Content-Disposition: form-data; name="tags[]"
+
+b
+--------------------------aaq9NTQK0xjrzUi76VOXTB--

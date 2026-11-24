@@ -1,0 +1,34 @@
+// @description Resets every request for Apache Roller's XML-RPC endpoint.
+// @patches Apache Roller 4.0.0 to 6.1.4 (fixed in 6.1.6)
+// @cve CVE-2026-129448, CVE-2026-82384
+// @severity critical
+// @tags http, java, rce, deserialization
+// @knob port  The port to guard.
+//
+// Roller deserializes an XML-RPC request before it authenticates the sender,
+// and before it checks whether XML-RPC is switched on in the admin UI. The
+// reported workaround is to remove the /roller-services/xmlrpc servlet
+// mapping; this is that, at the network. Blog clients that post over XML-RPC
+// (MetaWeblog, Blogger API) stop working while it is applied.
+//
+// A connection is reset once it has carried both path segments,
+// `roller-services` and `xmlrpc`, in any spelling Tomcat maps to the servlet.
+// Checked against Tomcat 9: it serves the same resource for
+// /roller-services;a=b/xmlrpc, //, /./, /x/../ and for any letter or the
+// hyphen percent-encoded (xmlrp%63, roller%2dservices), so the segments are
+// matched apart, each letter in either form, and remembered across the
+// connection rather than looked for as one string. The cost: a connection
+// that names both words anywhere, in a Referer or a body, is reset too.
+//
+// Plaintext HTTP/1 only: put it behind the TLS terminator. It reads nothing
+// on an AJP port or over HTTP/2.
+nocase;
+reassemble;
+regex services = "(r|%72)(o|%6f)(l|%6c)(l|%6c)(e|%65)(r|%72)(-|%2d)(s|%73)(e|%65)(r|%72)(v|%76)(i|%69)(c|%63)(e|%65)(s|%73)";
+regex xmlrpc = "(x|%78)(m|%6d)(l|%6c)(r|%72)(p|%70)(c|%63)";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 8080) decide pass;
+  if (all(scan(payload, 4096), services, xmlrpc)) decide rst("roller_xmlrpc", 0);
+  decide pass;
+}

@@ -1,0 +1,10 @@
+POST /form.php HTTP/1.1
+Host: 127.0.0.1:55776
+User-Agent: Wget/1.25.0
+Accept: */*
+Accept-Encoding: identity
+Connection: Keep-Alive
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 9
+
+a=1&b=two

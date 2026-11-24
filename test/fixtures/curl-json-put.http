@@ -1,0 +1,8 @@
+PUT /api/item/7 HTTP/1.1
+Host: 127.0.0.1:55776
+User-Agent: curl/8.7.1
+Accept: */*
+Content-Type: application/json
+Content-Length: 34
+
+{"name":"x","items":[[1,2],[3,4]]}

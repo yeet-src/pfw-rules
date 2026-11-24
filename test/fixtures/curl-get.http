@@ -1,0 +1,5 @@
+GET /index.php?page=2&tags[]=a&tags[]=b HTTP/1.1
+Host: 127.0.0.1:55776
+User-Agent: curl/8.7.1
+Accept: */*
+

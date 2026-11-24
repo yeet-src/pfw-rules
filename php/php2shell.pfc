@@ -1,0 +1,74 @@
+// @description Resets the multipart request shapes php2shell exploits use; ordinary uploads pass.
+// @patches PHP before 8.2.35, 8.3.36, 8.4.27 and 8.5.12; 8.1 and older have no release
+// @cve CVE-2026-109618, CVE-2026-109619
+// @severity critical
+// @tags http, php, rce, multipart
+// @knob port       The port to guard.
+// @knob multipart  0 resets every multipart request, for an app that takes no uploads.
+// @knob chunked    1 lets a chunked multipart request through.
+// @knob progress   1 lets the PHP_SESSION_UPLOAD_PROGRESS field through.
+// @knob nesting    1 lets field names nested eight or more levels through.
+//
+// Both bugs are reached through PHP's own multipart parser, before any
+// application code runs, so this narrows what a multipart request may look
+// like rather than matching one exploit:
+//
+//   php2shell_progress   the PHP_SESSION_UPLOAD_PROGRESS field name, the
+//                        consumer of the stale state in CVE-2026-109619
+//   php2shell_chunked    multipart on a connection that also carries a
+//                        Transfer-Encoding header: a body with no length for
+//                        post_max_size to check
+//   php2shell_nesting    eight [] groups in a row, a field name nested that
+//                        deep, raw or as %5B %5D
+//   php2shell_multipart  any multipart at all, when `multipart` is 0
+//
+// The patterns are bare tokens, checked against PHP 8.3 under Apache: PHP
+// takes the field name quoted, single-quoted, unquoted or after `name= `, and
+// Apache takes a folded Transfer-Encoding value and kilobytes of padding
+// between two headers, so anything tied to one spelling or one window is
+// stepped around. The cost is that a request which only mentions
+// PHP_SESSION_UPLOAD_PROGRESS is reset, and so is a keep-alive connection that
+// carries a multipart request and, separately, a chunked one (`curl -F f=@-`
+// sends chunked multipart by itself): set `chunked` to 1 behind a proxy that
+// pools connections and re-chunks.
+//
+// What it does not do: count parts or headers per part, which the
+// memory-exhaustion trigger also relies on (cap those at the proxy); see a
+// nested name whose keys are long enough to straddle a window move; read
+// HTTP/2. A request built to avoid all four shapes passes, so this buys time
+// to upgrade and is not the fix.
+//
+// Plaintext HTTP/1 only: put it where PHP is spoken to over HTTP (Apache
+// mod_php, FrankenPHP, or the proxy in front). It reads nothing on a TLS port
+// or a FastCGI socket.
+nocase;
+reassemble;
+pattern progress = "php_session_upload_progress";
+pattern multipart = "multipart/form-data", te = "transfer-encoding:";
+regex nested = "(\[[^\]]*\]){8}";
+regex nested_enc = "(%5b[^%&=]*%5d){8}";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 80) decide pass;
+  let allow_multipart = knob("multipart") ?? 1;
+  let allow_chunked = knob("chunked") ?? 0;
+  let allow_progress = knob("progress") ?? 0;
+  let allow_nesting = knob("nesting") ?? 0;
+
+  // scan, not within: the mask keeps what earlier windows of the connection
+  // held, so two headers padded a window apart are still seen together.
+  mask m = scan(payload, 4096);
+  if (any(m, progress)) {
+    if (allow_progress == 0) decide rst("php2shell_progress", 0);
+  }
+  if (any(m, nested, nested_enc)) {
+    if (allow_nesting == 0) decide rst("php2shell_nesting", 0);
+  }
+  if (any(m, multipart)) {
+    if (allow_multipart == 0) decide rst("php2shell_multipart", 0);
+    if (any(m, te)) {
+      if (allow_chunked == 0) decide rst("php2shell_chunked", 0);
+    }
+  }
+  decide pass;
+}

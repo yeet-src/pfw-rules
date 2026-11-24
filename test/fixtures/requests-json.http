@@ -1,0 +1,10 @@
+POST /api HTTP/1.1
+Host: 127.0.0.1:55776
+User-Agent: python-requests/2.33.0
+Accept-Encoding: gzip, deflate, zstd
+Accept: */*
+Connection: keep-alive
+Content-Length: 43
+Content-Type: application/json
+
+{"q": "php session upload", "n": [1, 2, 3]}

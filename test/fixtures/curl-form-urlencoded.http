@@ -1,0 +1,8 @@
+POST /login.php HTTP/1.1
+Host: 127.0.0.1:55776
+User-Agent: curl/8.7.1
+Accept: */*
+Content-Length: 46
+Content-Type: application/x-www-form-urlencoded
+
+user=jo&pass=hunter2&next=%2Faccount%3Ftab%3D1
