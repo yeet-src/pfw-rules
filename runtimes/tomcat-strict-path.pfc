@@ -1,0 +1,43 @@
+// @description Resets requests whose path Tomcat rewrites before routing: ;parameters, //, /./, /../ and percent-encoded letters.
+// @patches Hardening for any application on Apache Tomcat; no single CVE
+// @severity medium
+// @tags http, java, tomcat, hardening, path-normalization
+// @knob port    The port to guard.
+// @knob params  1 lets ;parameters through, for an app that still puts ;jsessionid in its URLs.
+//
+// Tomcat 9 serves /a/b for every one of /a;x=y/b, /a//b, /a/./b, /a/x/../b
+// and /a/%62: it strips path parameters, collapses slashes and dot segments,
+// and decodes percent-escapes before it picks a servlet. A filter in front
+// that matches a path as text, a proxy ACL, or another policy here, is stepped
+// around by any of them. Browsers and HTTP libraries send none of these, so
+// refusing them costs ordinary traffic nothing and gives every path rule in
+// front of the app back its meaning.
+//
+//   path_parameter  a `;` in the path
+//   path_segments   an empty or dot segment: //, /./, /../
+//   path_encoding   a percent-escape for a character that never needs one:
+//                   a letter, a digit, - . _ or for / \ ;
+//
+// Only the path is judged, the request target up to its `?`: a query may hold
+// any of these. The request line is recognised by an upper-case method and a
+// target that starts with `/` or `http`, so text that merely reads like one is
+// not; this policy does not fold case.
+//
+// A path longer than a reassembly window can keep, 256 bytes, with its odd
+// part laid across a window move is not seen. Plaintext HTTP/1 only.
+reassemble;
+regex param = "(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) (/|http)[^ ?\r\n]*;";
+regex segs = "(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) (//|(/|http)[^ ?\r\n]*([^: ?\r\n]//|/\.\.?(/| |\?|;)))";
+regex enc = "(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) (/|http)[^ ?\r\n]*%(2[dDeEfF]|3[0-9bB]|4[1-9a-fA-F]|5[0-9aAcCfF]|6[1-9a-fA-F]|7[0-9aA])";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 8080) decide pass;
+  let allow_params = knob("params") ?? 0;
+  mask m = scan(payload, 4096);
+  if (any(m, segs)) decide rst("path_segments", 0);
+  if (any(m, enc)) decide rst("path_encoding", 0);
+  if (any(m, param)) {
+    if (allow_params == 0) decide rst("path_parameter", 0);
+  }
+  decide pass;
+}

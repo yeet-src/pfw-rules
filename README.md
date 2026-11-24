@@ -1,99 +1,102 @@
 # pfw-rules
 
-pfw-C policies for the [pfw](https://github.com/yeet-src/pfw-core) firewall,
-pulled and applied with the `pfw` command.
+Policies for the [pfw](https://github.com/yeet-src/pfw) firewall: virtual
+patches for remote-code-execution bugs that are being exploited now, and a
+few rules about HTTP itself. Each one is a pfw-C program that runs at XDP,
+before a packet reaches the server.
 
 ```sh
 pfw remote add rules git@github.com:yeet-src/pfw-rules.git
 pfw pull                      # fetch, and see what changed
-pfw ls                        # every policy, numbered, with whether it compiles
-pfw apply rules:http/crawlers.pfc
+pfw ls                        # every policy, with what it is for
+pfw apply rules:runtimes/php2shell.pfc
+pfw knob set port 8080        # each policy guards one port; this is how to say which
 ```
 
-The firewall runs one policy at a time, so each `.pfc` here is a whole
-program: what it does not decide, it must pass.
+## The rules
 
-## Policies
+Every policy resets the connection that carries what it names and passes
+everything else. None of them bans a source address.
+
+### Applications
+
+One product, one endpoint, one bug.
+
+| policy | shields | what it resets | port |
+|---|---|---|---|
+| [`apps/confluence-remote-api.pfc`](apps/confluence-remote-api.pfc) | Confluence Data Center 1.x–9.x with the Remote API on. CVE-2026-90436, Apache Axis 1.x. In CISA KEV. | Requests for the SOAP API (`soap-axis1`) and the XML-RPC API (`/rpc/xmlrpc`). | 8090 |
+| [`apps/roller-xmlrpc.pfc`](apps/roller-xmlrpc.pfc) | Apache Roller 4.0.0–6.1.4. CVE-2026-129448. In CISA KEV. | Requests for `/roller-services/xmlrpc`. | 8080 |
+| [`apps/monai-label.pfc`](apps/monai-label.pfc) | MONAI Label 0.8.5 and earlier. CVE-2026-133968. In CISA KEV. | `/datastore/` requests whose query holds `..`, a slash, a backslash or an encoded dot. | 8000 |
+| [`apps/litellm-guardrails.pfc`](apps/litellm-guardrails.pfc) | LiteLLM 1.81.8 up to 1.83.10. CVE-2026-40217. In CISA KEV. | `POST /guardrails/test_custom_code`. | 4000 |
+
+### Runtimes
+
+A language runtime, library or server that every application on it shares.
+
+| policy | shields | what it resets | port |
+|---|---|---|---|
+| [`runtimes/php2shell.pfc`](runtimes/php2shell.pfc) | PHP before 8.2.35, 8.3.36, 8.4.27, 8.5.12. CVE-2026-109618, CVE-2026-109619. In CISA KEV. | The `PHP_SESSION_UPLOAD_PROGRESS` field; multipart with `Transfer-Encoding`; field names nested eight deep; optionally all multipart. | 80 |
+| [`runtimes/log4shell.pfc`](runtimes/log4shell.pfc) | Log4j 2.0-beta9–2.14.1. CVE-2021-44228, CVE-2021-45046. | `${jndi`, `${` with a built-in lookup name, and `${name:-value}`, raw, percent-encoded or as JSON `\u` escapes. | 8080 |
+| [`runtimes/tomcat-strict-path.pfc`](runtimes/tomcat-strict-path.pfc) | Any application on Tomcat. Hardening, no single CVE. | Paths Tomcat rewrites before routing: `;parameters`, `//`, `/./`, `/../`, percent-encoded letters. | 8080 |
+
+### HTTP
+
+| policy | shields | what it resets | port |
+|---|---|---|---|
+| [`http/h2c.pfc`](http/h2c.pfc) | nginx 1.9.5–1.31.8 and Apache httpd 2.4.55–2.4.70 with HTTP/2. CVE-2026-123007, CVE-2026-123633, CVE-2026-119618. | Cleartext HTTP/2: the client preface and the `Upgrade: h2c` handshake. | 80 |
+| [`http/crawlers.pfc`](http/crawlers.pfc) | A site that does not want to be crawled for training. | Requests from GPTBot, ClaudeBot and Bytespider, by user-agent. | 80 |
+
+### Baseline
 
 | policy | what it does |
 |---|---|
-| [`baseline/pass.pfc`](baseline/pass.pfc) | passes everything: the firewall attached and counting, deciding nothing |
-| [`http/crawlers.pfc`](http/crawlers.pfc) | resets AI crawlers on a web port by user-agent (`port`, default 80) |
-| [`php/php2shell.pfc`](php/php2shell.pfc) | resets the multipart request shapes php2shell uses, CVE-2026-109618 and CVE-2026-109619 (`port`, default 80) |
-| [`java/roller-xmlrpc.pfc`](java/roller-xmlrpc.pfc) | resets requests for Apache Roller's XML-RPC endpoint, CVE-2026-129448 (`port`, default 8080) |
-| [`java/axis1-soap.pfc`](java/axis1-soap.pfc) | resets requests for Confluence's Remote API (SOAP and XML-RPC), CVE-2026-90436 (`port`, default 8090) |
-| [`java/log4shell.pfc`](java/log4shell.pfc) | resets requests carrying a Log4j lookup, `${jndi:` and the nested forms that hide it, CVE-2021-44228 (`port`, default 8080) |
+| [`baseline/pass.pfc`](baseline/pass.pfc) | Passes everything: the firewall attached and counting, deciding nothing. The one to fall back to. |
 
-The virtual patches read plaintext HTTP, so they belong on the hop behind the
-TLS terminator. Each one narrows what reaches the vulnerable code until the
-software is upgraded; none of them is the fix.
+The port is each policy's default; `pfw knob set port N` changes it. The
+other knobs, and what each rule is called in `pfw status`, are in the comments
+at the top of the policy, which `pfw ls` prints.
 
-## Writing one
+## Before applying one
 
-A policy is `pattern` declarations and one `filter` block that ends every
-path in a verdict: `pass`, `drop`, `rst`, `ban` or `count`. A named verdict
-(`rst("crawler", 60)`) is a rule, and `pfw status` and `pfw metrics`
-count packets by it. The language is documented in
-[pfw-core](https://github.com/yeet-src/pfw-core/blob/master/docs/lang.md).
+**They are stopgaps.** A virtual patch narrows what reaches the vulnerable
+code until the software is upgraded. Each policy says in its comments which
+request shapes it does not cover. Upgrade anyway.
 
-Open it with a block of `@key value` comments. `pfw ls` prints them under
-the policy, so they are how someone choosing a policy learns what it is for:
+**Plaintext HTTP/1 only.** A policy reads the bytes on the wire, so it belongs
+on the hop behind the TLS terminator. It sees nothing on a TLS port, over
+HTTP/2, on a FastCGI socket or on an AJP port.
 
-```c
-// @description Resets connections that carry a JNDI lookup string.
-// @patches Apache Log4j 2.0-beta9 to 2.14.1
-// @cve CVE-2021-44228, CVE-2021-45046
-// @severity critical
-// @tags http, rce
-```
+**One at a time.** The firewall runs a single policy. A host that needs two
+of these cannot have both yet.
 
-| key | what it says |
+**Each has a cost, and it is written down.** The endpoint blocks stop the
+legitimate use of that endpoint: blog clients that post to Roller over
+XML-RPC, Confluence SOAP integrations, the guardrail tester in LiteLLM's admin
+UI. `log4shell` resets `${HOME:-/root}` in a posted shell script. `h2c` breaks
+a port that is meant to carry cleartext HTTP/2, gRPC above all. Read the
+policy's comments for its own list, and for the knob that relaxes it.
+
+## How far each has been tested
+
+Every policy is run by CI in pfw-core's reference interpreter and in the real
+XDP program over loopback TCP, against the pfw-core that pfw ships. The cases
+come from running the real software and recording what it accepts:
+
+| policy | checked against |
 |---|---|
-| `description` | one line: what it blocks and what it leaves alone |
-| `patches` | the software and versions it shields, when it is a virtual patch |
-| `cve` | the CVEs it addresses, comma-separated |
-| `severity` | `critical`, `high`, `medium` or `low` |
-| `tags` | words to find it by, comma-separated |
-| `knob NAME` | what one of its knobs is for |
+| `confluence-remote-api`, `roller-xmlrpc`, `tomcat-strict-path` | Tomcat 9.0: which path spellings reach the same servlet. Confluence and Roller themselves were not run. |
+| `php2shell` | PHP 8.3 under Apache 2.4: which multipart spellings its parser accepts. |
+| `log4shell` | Log4j 2.14.1: which of 25 lookup spellings made the logger connect out. All 17 that did are reset. |
+| `monai-label`, `litellm-guardrails` | FastAPI on uvicorn, the stack both run on: how paths are routed and queries decoded. Neither product was run. |
+| `h2c` | nginx 1.27 and httpd 2.4.71 with cleartext HTTP/2 enabled. |
 
-A **knob** is a value the policy reads and the operator may set, so one
-policy serves hosts that differ: `knob("port") ?? 80` is port 80 until someone
-runs `pfw knob set port 8080`. Give every knob a default and a `@knob`
-line. Values are kept per policy, so two policies may both call theirs `port`.
+No policy has been run against an exploit on a vulnerable build. What is
+shown is that each resets the request shapes the software accepts and the
+advisory describes.
 
-Only `description` is expected of every policy. The block ends at the first
-line that is not a comment; ordinary comments may follow the keys.
+## More
 
-Put a policy under the directory for the protocol or concern it guards.
-
-`pfw ls` compiles every policy in the repo against the running firewall,
-and `pfw apply` refuses one that does not compile, so check there before
-pushing.
-
-## Testing one
-
-A policy that compiles has not been shown to do anything. Two scripts do
-that, both against a [pfw-core](https://github.com/yeet-src/pfw-core) checkout:
-
-```sh
-PFW_CORE=../pfw-core node test/run.mjs       # anywhere: the reference interpreter
-PFW_CORE=../pfw-core node test/kernel.mjs    # Linux, root, yeetd: the real XDP program
-```
-
-`test/run.mjs` gives each policy the requests it must reset and the ones it
-must leave alone, and runs every captured request in `test/fixtures/` through
-every policy. `test/kernel.mjs` loads each policy into the kernel and drives it
-over loopback TCP: tokens split across segments, a signature kilobytes into a
-connection, a 300 kB upload that must arrive whole. It attaches to loopback,
-so give it a network namespace of its own.
-
-The two disagree in one place worth knowing: the interpreter's match mask
-remembers a whole connection, the kernel's only the current reassembly
-window. A policy that needs two tokens which may lie more than a window apart
-keeps them in a `flow.r0` bit each, as `java/roller-xmlrpc.pfc` does.
-
-Take the cases from the software, not from the advisory. Tomcat serves
-`/a;x=y/b`, `/a//b`, `/a/./b` and `/a/%62` as `/a/b`; PHP reads a multipart
-field name quoted, single-quoted or bare; Log4j resolves `${jndi${::-:}ldap…}`
-with no `jndi:` in it. Each of those was found by asking the real thing, and
-each broke a first draft that matched the string in the write-up.
+- [Writing a policy](docs/writing.md): the layout, the opening comments, and
+  what the first drafts here got wrong.
+- [Testing a policy](docs/testing.md): the two test scripts, the cases files,
+  and where cases come from.

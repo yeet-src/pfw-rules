@@ -1,0 +1,45 @@
+// @description Resets MONAI Label datastore requests whose query reaches outside the datastore.
+// @patches MONAI Label 0.8.5 and earlier (0.8.6 is named as the fix)
+// @cve CVE-2026-133968
+// @severity critical
+// @tags http, ai, path-traversal, file-write
+// @knob port  The port to guard.
+//
+// PUT /datastore/image takes the image ID from the `image` query parameter and
+// writes the upload to a path built from it, unchecked; PUT /datastore/label
+// does the same with the ID and the label tag. Authentication is off by
+// default, so anyone who can reach the server can write any file it can. The
+// fix reduces the ID to its basename, and this asks the same of the request:
+//
+//   monai_traversal  a /datastore/ request whose query holds `..`, a slash, a
+//                    backslash, any encoded dot (%2e) or a second `?`: an ID
+//                    is a name, not a path
+//
+// Checked against FastAPI on uvicorn, the stack MONAI Label runs on: a route
+// matches only its exact path, but percent-decoded first, the slash included
+// (/datastore%2fimage, /%64atastore/image), and a query value is decoded once
+// whatever the parameter is called or how often it is given. So the path is
+// matched with every character in either form, and the query is judged whole
+// rather than by looking for `image=`.
+//
+// Ordinary use passes: IDs such as scan_001.nii.gz, a DICOM UID with a tag,
+// the /info and /dataset routes, uploads of any size. An ID or tag that
+// really contains a slash is reset.
+//
+// One gap: a query padded past what a reassembly window keeps when it moves,
+// 256 bytes, with the traversal laid on the far side of that move, is not
+// seen. A length cap would close it, but its automaton is larger than the
+// kernel's regex table.
+//
+// Plaintext HTTP/1 only. The server is also unsafe on any network it should
+// not be on: the vendor's advice is to turn authentication on
+// (MONAI_LABEL_AUTH_ENABLE=True) and not expose it.
+nocase;
+reassemble;
+regex traversal = "(/|%2f)(d|%64)(a|%61)(t|%74)(a|%61)(s|%73)(t|%74)(o|%6f)(r|%72)(e|%65)(/|%2f)[^ ?\r\n]*\?[^ ?\r\n]*(\.\.|%2e|/|%2f|\\|%5c|\?)";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 8000) decide pass;
+  if (scan(payload, 4096) & traversal) decide rst("monai_traversal", 0);
+  decide pass;
+}

@@ -1,0 +1,31 @@
+// @description Resets requests for LiteLLM's guardrail code tester, POST /guardrails/test_custom_code.
+// @patches LiteLLM 1.81.8 up to 1.83.10 (upgrade to 1.83.11 or later)
+// @cve CVE-2026-40217
+// @severity critical
+// @tags http, ai, rce, sandbox-escape
+// @knob port  The port to guard.
+//
+// The endpoint runs Python the caller supplies inside a home-made sandbox,
+// which can be escaped to run code on the proxy host. It wants a credential,
+// but one that an ordinary internal user can be raised to. The advisory's own
+// workaround is to block the path at the proxy; this is that. Testing a
+// custom-code guardrail from the admin UI stops working while it is applied;
+// guardrails already configured keep running.
+//
+// Checked against FastAPI on uvicorn, the stack LiteLLM runs on: the route
+// matches only this exact path (no //, no ;parameters, no other case), but
+// percent-decoded first, the slash and underscore included, so every
+// character is matched in either form. The match is tied to the request
+// line, `POST ` and whatever root path the proxy is served under, because a
+// proxy for language models carries prompts that may well quote the path.
+//
+// Plaintext HTTP/1 only: put it behind the TLS terminator.
+nocase;
+reassemble;
+regex tester = "post [^ ?\r\n]*(/|%2f)(g|%67)(u|%75)(a|%61)(r|%72)(d|%64)(r|%72)(a|%61)(i|%69)(l|%6c)(s|%73)(/|%2f)(t|%74)(e|%65)(s|%73)(t|%74)(_|%5f)(c|%63)(u|%75)(s|%73)(t|%74)(o|%6f)(m|%6d)(_|%5f)(c|%63)(o|%6f)(d|%64)(e|%65)";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 4000) decide pass;
+  if (scan(payload, 4096) & tester) decide rst("litellm_guardrail_test", 0);
+  decide pass;
+}

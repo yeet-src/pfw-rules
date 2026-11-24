@@ -1,0 +1,39 @@
+// @description Resets cleartext HTTP/2: the connection preface and the Upgrade: h2c handshake.
+// @patches nginx 1.9.5 to 1.31.8 (fixed in 1.31.9 and 1.30.7); Apache httpd 2.4.55 to 2.4.70 with mod_http2 (fixed in 2.4.71)
+// @cve CVE-2026-123007, CVE-2026-123633, CVE-2026-119618
+// @severity critical
+// @tags http, http2, rce, nginx, apache
+// @knob port  The port to guard.
+//
+// Three memory-corruption bugs in the HTTP/2 code of nginx and Apache httpd,
+// all reached by speaking HTTP/2 to the server. The vendors' workaround is to
+// turn HTTP/2 off (`http2 off`, `Protocols http/1.1`); on a cleartext port
+// this is that, from outside, for a server whose config cannot be touched yet.
+//
+//   h2c_preface  a connection that opens with the client preface,
+//                PRI * HTTP/2.0. Both servers switch on it, and only there
+//   h2c_upgrade  an HTTP2-Settings header. httpd answers Upgrade: h2c with
+//                101 only when one is present (empty will do), and takes the
+//                Upgrade value folded, in a list, or kilobytes away, so the
+//                settings header is the one thing to hold on to. nginx does
+//                not upgrade at all
+//
+// Checked against nginx 1.27 and httpd 2.4.71 with h2c enabled.
+//
+// It does nothing for HTTP/2 inside TLS, which is how browsers speak it and
+// where the published nginx testing was done: there the choice is made in the
+// handshake and a filter cannot take it back. Use the config workaround or
+// the upgrade for those listeners.
+//
+// It will break a port that is meant to carry cleartext HTTP/2, gRPC between
+// services above all. Do not apply it there.
+nocase;
+reassemble;
+pattern preface = "PRI * HTTP/2.0", settings = "http2-settings";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 80) decide pass;
+  if (starts(payload, preface)) decide rst("h2c_preface", 0);
+  if (scan(payload, 4096) & settings) decide rst("h2c_upgrade", 0);
+  decide pass;
+}
