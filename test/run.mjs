@@ -50,7 +50,16 @@ for (const f of policies.sort()) {
   const fits = !c.regex || c.regex.nstates <= LIMITS.RE_STATES;
   ok(c.ok && fits, `${f} compiles`, c.ok ? `regex DFA has ${c.regex?.nstates} states` : JSON.stringify(c.errors));
   ok(!(c.warnings ?? []).length, `${f} compiles without warnings`, JSON.stringify(c.warnings));
-  ok(/^\/\/ @description \S/.test(readFileSync(new URL(f, root), "utf8")), `${f} opens with @description`);
+  /* `pfw ls` prints the opening comments under each policy, a line for the
+   * description, one for the CVEs, severity, what it patches and its tags,
+   * and one a knob. They have to fit a terminal without wrapping. */
+  const meta = Object.fromEntries(["description", "patches", "tags"].map((k) => [k, readFileSync(new URL(f, root), "utf8").match(new RegExp(`^// @${k} (.*)$`, "m"))?.[1] ?? ""]));
+  const knobLines = [...readFileSync(new URL(f, root), "utf8").matchAll(/^\/\/ @knob (\S+)\s+(.*)$/gm)];
+  ok(meta.description.length > 0, `${f} opens with @description`);
+  ok(meta.description.length <= 80, `${f}: @description fits in 80 characters`, `${meta.description.length}`);
+  ok(meta.patches.length <= 70, `${f}: @patches fits in 70 characters`, `${meta.patches.length}`);
+  ok(meta.tags.split(",").filter((t) => t.trim()).length <= 4, `${f}: at most four @tags`, meta.tags);
+  for (const [, name, text] of knobLines) ok(text.length <= 64 && !/see below/.test(text), `${f}: @knob ${name} is one short line`, text);
   if (c.ok) progs.set(f, toProgram(c));
 }
 

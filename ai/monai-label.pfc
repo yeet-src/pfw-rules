@@ -1,9 +1,11 @@
-// @description Resets MONAI Label datastore requests whose query reaches outside the datastore.
-// @patches MONAI Label 0.8.5 and earlier (0.8.6 is named as the fix)
+// @description Resets MONAI Label datastore requests that reach outside the datastore.
+// @patches MONAI Label 0.8.5 and earlier
 // @cve CVE-2026-133968
 // @severity critical
-// @tags http, ai, path-traversal, file-write
-// @knob port  The port to guard. Streams are reassembled only on 8000; see below.
+// @tags ai, monai, path-traversal
+// @knob port  The port to guard.
+//
+// 0.8.6 is named as the fix.
 //
 // PUT /datastore/image takes the image ID from the `image` query parameter and
 // writes the upload to a path built from it, unchecked; PUT /datastore/label

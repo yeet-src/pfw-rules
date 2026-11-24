@@ -1,10 +1,13 @@
-// @description Resets requests that carry a serialized PHP object, raw, percent-encoded or base64.
-// @patches WordPress plugins and other PHP code that unserialize() request data: Simple Shopping Cart (CVE-2026-131782), APCu Manager (CVE-2026-131754)
+// @description Resets requests that carry a serialized PHP object.
+// @patches PHP code that unserializes request data, WordPress plugins above all
 // @cve CVE-2026-131782, CVE-2026-131754
 // @severity high
-// @tags http, php, wordpress, cms, deserialization, object-injection
-// @knob port    The port to guard. Streams are reassembled only on 80; see below.
+// @tags php, wordpress, deserialization
+// @knob port    The port to guard.
 // @knob base64  1 lets base64-encoded objects through.
+//
+// Among them Simple Shopping Cart (CVE-2026-131782) and APCu Manager
+// (CVE-2026-131754).
 //
 // PHP object injection is one bug with many addresses: a plugin passes a
 // cookie, a form field or a query parameter to unserialize(), and an object

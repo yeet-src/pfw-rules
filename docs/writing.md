@@ -46,6 +46,11 @@ policy, so they are how someone choosing a policy learns what it is for:
 | `tags` | words to find it by, comma-separated |
 | `knob NAME` | what one of its knobs is for |
 
+`pfw ls` prints these on a few lines under each policy, so they have to fit a
+terminal: the tests fail a `description` over 80 characters, a `patches` over
+70, more than four tags, or a knob line over 64. Put the product and its
+versions in `patches` and everything else in the comments that follow.
+
 Only `description` is required; the tests fail a policy without it. The block
 ends at the first line that is not a comment. After the keys, say in ordinary
 comments what each rule matches, what it was checked against, what it costs

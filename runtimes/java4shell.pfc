@@ -1,9 +1,12 @@
-// @description Resets requests carrying Base64 of the one shape that reaches the OpenJDK decoder bug: a 1-3 character tail, ending in padding, after whole 64-character blocks.
-// @patches OpenJDK 17.0.6 and later, 21, 25 and 27 on x86-64 with AVX-512 VBMI, before the November 2026 fixes
+// @description Resets requests carrying Base64 shaped to reach the OpenJDK decoder bug.
+// @patches OpenJDK 17.0.6+, 21, 25, 27 on x86-64 with AVX-512
 // @cve CVE-2026-114938
 // @severity critical
-// @tags http, java, rce, base64, memory-corruption
-// @knob port  The port to guard. Streams are reassembled only on 8080; see below.
+// @tags java, base64, rce
+// @knob port  The port to guard.
+//
+// The shape: a 1-3 character tail, ending in padding, after whole 64-character
+// blocks. Fixed in the November 2026 JDK updates.
 //
 // Java4Shell is a write past the end of a buffer in the JVM's AVX-512 Base64
 // decoder, reached by any code that decodes Base64 from a request: Basic

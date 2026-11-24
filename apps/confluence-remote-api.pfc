@@ -1,10 +1,12 @@
-// @description Resets every request for Confluence's Remote API, SOAP and XML-RPC.
-// @patches Atlassian Confluence Data Center 1.x to 9.x with Remote API on (fixed in 9.2.28)
+// @description Resets requests for Confluence's Remote API, SOAP and XML-RPC.
+// @patches Confluence Data Center before 9.2.28, Remote API on
 // @cve CVE-2026-90436
 // @severity critical
-// @tags http, java, rce, soap, confluence
-// @knob port    The port to guard. Streams are reassembled only on 8090; see below.
-// @knob xmlrpc  1 lets /rpc/xmlrpc through and resets only the SOAP paths.
+// @tags confluence, java, rce
+// @knob port    The port to guard.
+// @knob xmlrpc  1 lets /rpc/xmlrpc through; SOAP is still reset.
+//
+// Affects Confluence Data Center 1.x to 9.x; 10.x removed the feature.
 //
 // Apache Axis 1.x is end-of-life and has an unauthenticated unsafe-reflection
 // bug; Confluence reaches it when "Remote API (XML-RPC & SOAP)" is enabled.

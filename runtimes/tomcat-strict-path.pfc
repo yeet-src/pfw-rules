@@ -1,9 +1,9 @@
-// @description Resets requests whose path Tomcat rewrites before routing: ;parameters, //, /./, /../ and percent-encoded letters.
-// @patches Hardening for any application on Apache Tomcat; no single CVE
+// @description Resets paths Tomcat rewrites before routing: ;params, //, /./, /../, %41.
+// @patches Any application on Apache Tomcat (hardening)
 // @severity medium
-// @tags http, java, tomcat, hardening, path-normalization
-// @knob port    The port to guard. Streams are reassembled only on 8080; see below.
-// @knob params  1 lets ;parameters through, for an app that still puts ;jsessionid in its URLs.
+// @tags tomcat, java, hardening
+// @knob port    The port to guard.
+// @knob params  1 lets ;parameters through, for apps that use ;jsessionid.
 //
 // Tomcat 9 serves /a/b for every one of /a;x=y/b, /a//b, /a/./b, /a/x/../b
 // and /a/%62: it strips path parameters, collapses slashes and dot segments,

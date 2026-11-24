@@ -1,9 +1,9 @@
-// @description Resets ASP.NET form posts whose Idunno.AntiCsrf token is anything but a serialized string.
-// @patches Idunno.AntiCsrf 0.9.1.0 (0.9.1 Beta), the last release; there will be no fix
+// @description Resets ASP.NET form posts whose Idunno.AntiCsrf token is not a plain string.
+// @patches Idunno.AntiCsrf 0.9.1, abandoned: there will be no fix
 // @cve CVE-2026-131914
 // @severity critical
-// @tags http, aspnet, dotnet, rce, deserialization
-// @knob port  The port to guard. Streams are reassembled only on 80; see below.
+// @tags aspnet, dotnet, deserialization, rce
+// @knob port  The port to guard.
 //
 // The module hands the hidden CSRF form field to ObjectStateFormatter with no
 // signature check, so one unauthenticated POST to any .aspx page that carries

@@ -1,9 +1,9 @@
-// @description Resets requests that bring their own X-GPUStack-Real-IP header, which GPUStack trusts to mean "this came from localhost".
+// @description Resets requests that bring their own X-GPUStack-Real-IP header.
 // @patches GPUStack before 2.2.0
 // @cve CVE-2026-102895
 // @severity critical
-// @tags http, ai, gpustack, authentication-bypass, rce
-// @knob port  The port to guard. Streams are reassembled only on 80; see below.
+// @tags ai, gpustack, auth-bypass, rce
+// @knob port  The port to guard.
 //
 // GPUStack skips authentication for requests from the loopback address, and
 // takes the client's address from the X-GPUStack-Real-IP header when there is

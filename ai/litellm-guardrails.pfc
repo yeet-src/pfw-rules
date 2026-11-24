@@ -1,9 +1,11 @@
-// @description Resets requests for LiteLLM's guardrail code tester, POST /guardrails/test_custom_code.
-// @patches LiteLLM 1.81.8 up to 1.83.10 (upgrade to 1.83.11 or later)
+// @description Resets POST /guardrails/test_custom_code, LiteLLM's guardrail code tester.
+// @patches LiteLLM 1.81.8 to 1.83.10
 // @cve CVE-2026-40217
 // @severity critical
-// @tags http, ai, rce, sandbox-escape
-// @knob port  The port to guard. Streams are reassembled only on 4000; see below.
+// @tags ai, litellm, rce
+// @knob port  The port to guard.
+//
+// Upgrade to LiteLLM 1.83.11 or later.
 //
 // The endpoint runs Python the caller supplies inside a home-made sandbox,
 // which can be escaped to run code on the proxy host. It wants a credential,

@@ -1,9 +1,9 @@
-// @description Resets TLS handshakes from clients that offer only SSLv3, TLS 1.0 or 1.1; optionally those offering a NULL, RC4 or EXPORT suite.
-// @patches Hardening for any TLS listener; the protocol versions deprecated by RFC 8996
+// @description Resets TLS handshakes from clients limited to SSLv3, TLS 1.0 or TLS 1.1.
+// @patches Any TLS listener (hardening, RFC 8996)
 // @severity medium
-// @tags tls, hardening, handshake
+// @tags tls, hardening
 // @knob port    The port to guard.
-// @knob suites  1 also resets a client that offers any NULL, RC4 or EXPORT suite.
+// @knob suites  1 also resets clients offering a NULL, RC4 or EXPORT suite.
 //
 // The one part of a TLS connection a filter can read is the ClientHello, and
 // it says what the client is. Parsed from its real fields, not scanned:

@@ -1,9 +1,9 @@
-// @description Resets requests for the proxy.php of Nextcloud's built-in Collabora server (the richdocumentscode app).
-// @patches Collabora Online built-in CODE server (richdocumentscode) before 26.4.303, in Nextcloud
+// @description Resets requests for proxy.php of Nextcloud's built-in Collabora server.
+// @patches Nextcloud richdocumentscode before 26.4.303
 // @cve CVE-2026-110447
 // @severity critical
-// @tags http, nextcloud, collabora, php, rce, command-injection
-// @knob port  The port to guard. Streams are reassembled only on 80; see below.
+// @tags nextcloud, collabora, php, rce
+// @knob port  The port to guard.
 //
 // The app's proxy.php starts the bundled CODE server when it is not running,
 // and a request can make it run an operating-system command as the web

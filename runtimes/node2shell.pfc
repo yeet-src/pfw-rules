@@ -1,9 +1,12 @@
-// @description Resets requests whose body is Brotli-compressed (Content-Encoding: br), the way in to the Node.js Brotli decoder bug.
-// @patches Node.js before 22.23.4, 24.22.1 and 26.12.1 (20 and older are end-of-life and unpatched); Bun before its October 2026 fix
+// @description Resets requests whose body is Brotli-compressed (Content-Encoding: br).
+// @patches Node.js before 22.23.4, 24.22.1, 26.12.1
 // @cve CVE-2026-111497
 // @severity critical
-// @tags http, nodejs, rce, brotli, memory-corruption
-// @knob port  The port to guard. Streams are reassembled only on 3000; see below.
+// @tags nodejs, brotli, rce
+// @knob port  The port to guard.
+//
+// Node 20 and older are end-of-life and unpatched. Bun before its October 2026
+// fix is affected too.
 //
 // Node2Shell is memory corruption in the Brotli decoder that ships inside
 // Node.js. A server reaches it without ever calling Brotli itself: Express 5

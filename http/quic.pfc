@@ -1,9 +1,12 @@
-// @description Drops QUIC handshakes, so HTTP/3 never starts and clients use HTTP/2 or HTTP/1.1 over TCP instead.
-// @patches nginx 1.25.0 to 1.31.8 with HTTP/3 enabled (fixed in 1.31.9 and 1.30.7); any server whose HTTP/3 stack cannot be patched yet
+// @description Drops QUIC handshakes, so HTTP/3 never starts and clients fall back to TCP.
+// @patches nginx 1.25.0 to 1.31.8 with HTTP/3 enabled
 // @cve CVE-2026-121810
 // @severity high
-// @tags http, http3, quic, udp, nginx
+// @tags http3, quic, nginx
 // @knob port  The UDP port to guard.
+//
+// Fixed in nginx 1.31.9 and 1.30.7. Of use for any server whose HTTP/3 stack
+// cannot be patched yet.
 //
 // One of the five nginx bugs disclosed in November 2026 is a use-after-free
 // in its HTTP/3 code, reached by speaking QUIC to the server. The vendor's

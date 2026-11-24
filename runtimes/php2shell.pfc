@@ -1,13 +1,15 @@
-// @description Resets the multipart request shapes php2shell exploits use; ordinary uploads pass.
-// @patches PHP before 8.2.35, 8.3.36, 8.4.27 and 8.5.12; 8.1 and older have no release
+// @description Resets the multipart request shapes php2shell uses; ordinary uploads pass.
+// @patches PHP before 8.2.35, 8.3.36, 8.4.27, 8.5.12
 // @cve CVE-2026-109618, CVE-2026-109619
 // @severity critical
-// @tags http, php, rce, multipart
-// @knob port       The port to guard. Streams are reassembled only on 80; see below.
-// @knob multipart  0 resets every multipart request, for an app that takes no uploads.
-// @knob chunked    1 lets a chunked multipart request through.
-// @knob progress   1 lets the PHP_SESSION_UPLOAD_PROGRESS field through.
-// @knob nesting    1 lets field names nested eight or more levels through.
+// @tags php, multipart, rce
+// @knob port       The port to guard.
+// @knob multipart  0 resets every multipart request.
+// @knob chunked    1 lets chunked multipart through.
+// @knob progress   1 lets PHP_SESSION_UPLOAD_PROGRESS through.
+// @knob nesting    1 lets deeply nested field names through.
+//
+// PHP 8.1 and older have no fixed release.
 //
 // Both bugs are reached through PHP's own multipart parser, before any
 // application code runs, so this narrows what a multipart request may look

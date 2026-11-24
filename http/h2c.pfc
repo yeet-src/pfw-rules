@@ -1,9 +1,11 @@
-// @description Resets cleartext HTTP/2: the connection preface and the Upgrade: h2c handshake.
-// @patches nginx 1.9.5 to 1.31.8 (fixed in 1.31.9 and 1.30.7); Apache httpd 2.4.55 to 2.4.70 with mod_http2 (fixed in 2.4.71)
+// @description Resets cleartext HTTP/2: the client preface and the Upgrade: h2c handshake.
+// @patches nginx before 1.31.9 and 1.30.7; Apache httpd 2.4.55 to 2.4.70
 // @cve CVE-2026-123007, CVE-2026-123633, CVE-2026-119618
 // @severity critical
-// @tags http, http2, rce, nginx, apache
-// @knob port  The port to guard. Streams are reassembled only on 80; see below.
+// @tags http2, nginx, apache, rce
+// @knob port  The port to guard.
+//
+// nginx is affected from 1.9.5; httpd with mod_http2, fixed in 2.4.71.
 //
 // Three memory-corruption bugs in the HTTP/2 code of nginx and Apache httpd,
 // all reached by speaking HTTP/2 to the server. The vendors' workaround is to

@@ -1,9 +1,11 @@
-// @description Resets every request for Apache Roller's XML-RPC endpoint.
-// @patches Apache Roller 4.0.0 to 6.1.4 (fixed in 6.1.6)
+// @description Resets requests for Apache Roller's XML-RPC endpoint.
+// @patches Apache Roller 4.0.0 to 6.1.4
 // @cve CVE-2026-129448, CVE-2026-82384
 // @severity critical
-// @tags http, java, rce, deserialization
-// @knob port  The port to guard. Streams are reassembled only on 8080; see below.
+// @tags roller, java, rce
+// @knob port  The port to guard.
+//
+// Fixed in Roller 6.1.6.
 //
 // Roller deserializes an XML-RPC request before it authenticates the sender,
 // and before it checks whether XML-RPC is switched on in the admin UI. The

@@ -1,9 +1,9 @@
-// @description Resets requests for a CMS installer left reachable on a live site: Drupal's and WordPress's install.php, and anything under wp-content/upgrade/.
-// @patches Drupal before 10.6.22, 11.3.22 and 11.4.13; WordPress before 7.1.4
+// @description Resets requests for install.php and for WordPress's upgrade staging directory.
+// @patches Drupal before 10.6.22, 11.3.22, 11.4.13; WordPress before 7.1.4
 // @cve CVE-2026-132165, CVE-2026-119977
 // @severity critical
-// @tags http, cms, drupal, wordpress, php, rce, installer
-// @knob port  The port to guard. Streams are reassembled only on 80; see below.
+// @tags drupal, wordpress, php, rce
+// @knob port  The port to guard.
 //
 // Two bugs with one cure. Drupal's installer can be driven to reinstall a
 // live site (SA-CORE-2026-017, exploited since 19 November 2026). WordPress

@@ -1,10 +1,12 @@
-// @description Resets requests that carry a Log4j lookup: ${jndi:...} and the nested forms that hide it.
-// @patches Apache Log4j 2.0-beta9 to 2.14.1 (JNDI lookups are off from 2.16.0)
+// @description Resets requests that carry a Log4j lookup, ${jndi:...} and its disguises.
+// @patches Apache Log4j 2.0-beta9 to 2.14.1
 // @cve CVE-2021-44228, CVE-2021-45046
 // @severity critical
-// @tags http, java, rce, log4j
-// @knob port      The port to guard. Streams are reassembled only on 8080; see below.
-// @knob defaults  1 lets ${name:-value} through, for an app that is posted shell or template text.
+// @tags java, log4j, rce
+// @knob port      The port to guard.
+// @knob defaults  1 lets ${name:-value} through, for posted shell or templates.
+//
+// JNDI lookups are off by default from Log4j 2.16.0.
 //
 // Log4j resolves ${...} in anything it logs, so the string can sit in any
 // header, the URL or the body. Three rules, each checked against what Log4j
