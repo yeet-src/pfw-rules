@@ -19,7 +19,7 @@ program: what it does not decide, it must pass.
 | policy | what it does |
 |---|---|
 | [`baseline/pass.pfc`](baseline/pass.pfc) | passes everything: the firewall attached and counting, deciding nothing |
-| [`http/crawlers.pfc`](http/crawlers.pfc) | resets AI crawlers on port 80 by user-agent |
+| [`http/crawlers.pfc`](http/crawlers.pfc) | resets AI crawlers on a web port by user-agent (`port`, default 80) |
 
 ## Writing one
 
@@ -47,6 +47,12 @@ the policy, so they are how someone choosing a policy learns what it is for:
 | `cve` | the CVEs it addresses, comma-separated |
 | `severity` | `critical`, `high`, `medium` or `low` |
 | `tags` | words to find it by, comma-separated |
+| `knob NAME` | what one of its knobs is for |
+
+A **knob** is a value the policy reads and the operator may set, so one
+policy serves hosts that differ: `knob("port") ?? 80` is port 80 until someone
+runs `pfwctl knob set port 8080`. Give every knob a default and a `@knob`
+line. Values are kept per policy, so two policies may both call theirs `port`.
 
 Only `description` is expected of every policy. The block ends at the first
 line that is not a comment; ordinary comments may follow the keys.

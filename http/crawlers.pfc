@@ -1,11 +1,12 @@
-// @description Resets AI crawlers on port 80 by user-agent.
+// @description Resets AI crawlers on a web port by user-agent.
 // @tags http, crawlers
+// @knob port  The port to guard.
 //
 // Matches GPTBot, ClaudeBot and Bytespider, case-insensitively.
 nocase;
 pattern gptbot = "GPTBot", claudebot = "ClaudeBot", bytespider = "Bytespider";
 filter {
-  if (dport != 80) decide pass;
+  if (dport != knob("port") ?? 80) decide pass;
   if (scan(payload, 1460) & (gptbot | claudebot | bytespider)) decide rst("crawler", 60);
   decide pass;
 }
