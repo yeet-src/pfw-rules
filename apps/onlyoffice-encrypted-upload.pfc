@@ -1,0 +1,67 @@
+// @description Resets ONLYOFFICE image uploads whose encrypted-file header names a path.
+// @patches ONLYOFFICE Document Server 5.1.5 to 5.6.2
+// @cve CVE-2021-3199
+// @severity critical
+// @tags onlyoffice, path-traversal, rce
+// @knob port  The port to guard.
+// @knob strict  Set to 1 to reset compressed and chunked request bodies too.
+//
+// Fixed in Document Server 5.6.3 (server 5.6.3.2).
+//
+// POST /upload/DOC/USER/INDEX stores an image for a document. With JWT on, a
+// token that marks the document as encrypted makes the server accept a body
+// that begins `ENCRYPTED;`, and take the file's extension from what lies
+// between that and the next semicolon. The affected versions put it into the
+// storage path as it comes, so `ENCRYPTED;/../../..NAME;` writes the rest of
+// the body to any file the server can write, its own executables among them.
+// The fix accepts only an extension on the configured list. This asks for an
+// extension that is one:
+//
+//   onlyoffice_encrypted  a line that begins `ENCRYPTED;` and has anything
+//                         but letters and digits before the next semicolon
+//   onlyoffice_encoding   with `strict` set to 1: a request with a
+//                         Content-Encoding or Transfer-Encoding header
+//
+// Read from the source of server 5.6.3.1 (fileuploaderservice.js, server.js)
+// and of the fix, not from a running Document Server:
+//   - the marker is compared exactly, in upper case, at the first byte of
+//     the body, so the first rule keeps its case while the rest of the
+//     policy ignores it
+//   - the route's body parser inflates a gzip or deflate body, and a chunked
+//     body can be cut inside the marker; in either the marker is not on the
+//     wire as the server will read it, and the first rule does not see it.
+//     A browser sends neither, but curl and other API clients do send
+//     chunked bodies, so resetting them is left to the operator: set
+//     `strict` to 1 where only browsers use the server. Without it this
+//     stops the request as published and not one that has been compressed
+//   - the traversal is in the body, not in the URL or the token, so the path
+//     is not part of the match; the older route /uploadold/ and anything
+//     else on the port is held to the same rule
+//
+// Ordinary use passes: an image upload, and an encrypted one from the
+// desktop editors (`ENCRYPTED;png;`). The cost of the first rule: a text
+// body with a line that starts `ENCRYPTED;` and then punctuation is reset.
+//
+// The attacker needs a token signed with the server's JWT secret; the
+// versions concerned shipped with a well-known default. Change it.
+//
+// Plaintext HTTP/1 only: put it behind the TLS terminator, in front of the
+// Document Server's own nginx.
+nocase;
+// Reassembly follows port 80 only. With the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 80;
+regex encrypted = "(?-i)\nENCRYPTED;[A-Za-z0-9]*[^A-Za-z0-9;]";
+regex encoding = "\n(content|transfer)-encoding[ \t]*:";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 80) decide pass;
+  let strict = knob("strict") ?? 0;
+  mask m = scan(payload, 4096);
+  if (any(m, encrypted)) decide rst("onlyoffice_encrypted", 0);
+  if (any(m, encoding)) {
+    if (strict != 0) decide rst("onlyoffice_encoding", 0);
+  }
+  decide pass;
+}

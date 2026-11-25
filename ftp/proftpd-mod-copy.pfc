@@ -1,0 +1,53 @@
+// @description Resets FTP sessions that send ProFTPD's SITE CPFR or SITE CPTO.
+// @patches ProFTPD 1.3.5 with mod_copy
+// @cve CVE-2015-3306
+// @severity critical
+// @tags ftp, proftpd, rce
+// @knob port  The FTP control port to guard.
+//
+// Fixed in ProFTPD 1.3.5a and 1.3.6rc1.
+//
+// mod_copy adds two commands, SITE CPFR and SITE CPTO, that copy a file from
+// one path on the server to another. The affected version runs them for a
+// client that has not logged in, so anyone who can reach port 21 can read
+// any file the daemon can and write one wherever it may. The fix asks for a
+// login first; this takes the two commands away from everyone, logged in or
+// not. The better fix where mod_copy is not used is to stop loading it.
+//
+//   proftpd_copy  SITE, white space, then CPFR or CPTO, in any case
+//
+// Checked against ProFTPD 1.3.8, which parses a command the same way and
+// answers a recognised one with "530 Please login":
+//   - the two words may be in any case, and any white space may part them:
+//     a space, a tab, a vertical tab or a form feed
+//   - the server strips Telnet control sequences out of a command before it
+//     reads it, so `SI<IAC IP>TE C<IAC WILL 1>PFR` is SITE CPFR. It strips
+//     IAC followed by IP or DM, and IAC followed by WILL, WONT, DO or DONT
+//     and one more byte. So between any two letters this allows any run of
+//     two or three bytes of which the first two are 0x7F or above
+//   - SITE_CPFR, a doubled space and a non-breaking space are not understood
+// 1.3.5 itself was not run.
+//
+// The cost: an authenticated client that copies files with these commands
+// cannot, and a file whose name contains "site cpfr" cannot be named in a
+// command. SITE COPY, which later versions add and which needs a login, is
+// left alone.
+//
+// One gap: more than 256 bytes of Telnet sequences between two letters, with
+// the rest laid across the move of the reassembly window, is not seen.
+//
+// The control connection only, and in the clear: it reads nothing once a
+// client has sent AUTH TLS, and nothing on SFTP, which is a different
+// protocol on a different port.
+nocase;
+// Reassembly follows port 21 only. With the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 21;
+regex copy = "s([^\0-~][^\0-~].?)*i([^\0-~][^\0-~].?)*t([^\0-~][^\0-~].?)*e([^\0-~][^\0-~].?)*\s(\s|[^\0-~][^\0-~].?)*c([^\0-~][^\0-~].?)*p([^\0-~][^\0-~].?)*(f([^\0-~][^\0-~].?)*r|t([^\0-~][^\0-~].?)*o)";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 21) decide pass;
+  if (scan(payload, 4096) & copy) decide rst("proftpd_copy", 0);
+  decide pass;
+}
