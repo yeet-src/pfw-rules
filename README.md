@@ -25,6 +25,7 @@ pick the one for the thing you cannot upgrade yet.
 | Node.js | `runtimes/node2shell.pfc` |
 | Java, any application | `runtimes/java4shell.pfc`; with an old Log4j, `runtimes/log4shell.pfc`; on Tomcat, `runtimes/tomcat-strict-path.pfc` |
 | Confluence Data Center | `apps/confluence-remote-api.pfc` |
+| Grafana before 13.3.2, 13.2.7, 13.1.11, 13.0.14 or 12.4.16 | `apps/grafana-secrets.pfc` |
 | Apache Roller | `apps/roller-xmlrpc.pfc` |
 | Struts 2 with Dynamic Method Invocation on | `runtimes/struts-method-prefix.pfc` |
 | Plex Media Server | `apps/plex-timeline-protocol.pfc` |
@@ -67,6 +68,7 @@ One product, one endpoint, one bug.
 | [`apps/plex-timeline-protocol.pfc`](apps/plex-timeline-protocol.pfc) | Plex Media Server before 1.43.3.10861. CVE-2026-96652, the first step of the Plex2Shell chain. In CISA KEV. | Requests whose `protocol` parameter holds more than a bare word: a colon, a slash, a percent sign. | 32400 |
 | [`apps/onlyoffice-encrypted-upload.pfc`](apps/onlyoffice-encrypted-upload.pfc) | ONLYOFFICE Document Server 5.1.5–5.6.2. CVE-2021-3199. In CISA KEV. | Uploads that begin `ENCRYPTED;` and then name anything but a file extension; with `strict` set, compressed and chunked request bodies as well. | 80 |
 | [`apps/ahsaycbs-update-receivers.pfc`](apps/ahsaycbs-update-receivers.pfc) | AhsayCBS up to 9.15.2.69 and 10.3.4.44. CVE-2026-105134. In CISA KEV. | Requests that name `UpdateReceivers`, the replication endpoint the exploit chain ends in. | 80 |
+| [`apps/grafana-secrets.pfc`](apps/grafana-secrets.pfc) | Grafana before 13.3.2, 13.2.7, 13.1.11, 13.0.14, 12.4.16. CVE-2026-107561, CVE-2026-88960; Grafana has not said which ID is which fix, so both are covered. | Any request carrying a `login_error` cookie, which `/login` decrypted and displayed; tests of a saved contact point, which could carry its stored secrets elsewhere. | 3000 |
 
 ### AI tooling
 
@@ -154,7 +156,8 @@ of these cannot have both yet.
 legitimate use of that endpoint: blog clients that post to Roller over
 XML-RPC, Confluence SOAP integrations, the guardrail tester in LiteLLM's admin
 UI, document editing through Nextcloud's built-in Collabora, changes to an
-AhsayCBS replication, file copies over FTP with mod_copy. `log4shell`
+AhsayCBS replication, file copies over FTP with mod_copy, the "Test"
+button on a saved Grafana contact point. `log4shell`
 resets `${HOME:-/root}` in a posted shell script. `h2c` breaks
 a port that is meant to carry cleartext HTTP/2, gRPC above all. Read the
 policy's comments for its own list, and for the knob that relaxes it.
@@ -190,6 +193,7 @@ The cases come from running the real software and recording what it accepts:
 | `proftpd-mod-copy` | ProFTPD 1.3.8 with mod_copy: which spellings of the two commands it recognises, the Telnet control bytes it strips out of a command among them. 1.3.5 was not run. |
 | `onlyoffice-encrypted-upload` | The source of ONLYOFFICE server 5.6.3.1 and of its fix: how the marker is compared and where the extension ends. No Document Server was run. |
 | `ahsaycbs-update-receivers` | Nothing but the advisories, which name the path, and Tomcat 9.0 for its spellings. AhsayCBS is commercial and was not run. |
+| `grafana-secrets` | Grafana 13.3.1 itself: which `Cookie` header spellings Go's `Request.Cookie` reads a named cookie from, and which spellings of the receiver test route reach its handler. Percent-encoding anywhere in the route does; `//`, `/./` and a trailing slash do not. |
 | `h2c` | nginx 1.27 and httpd 2.4.71 with cleartext HTTP/2 enabled. |
 | `quic` | The QUIC Initial packet a real curl sends with `--http3-only`. That a refused client falls back to TCP was not tested. |
 | `legacy-clients` | The ClientHellos twelve real client stacks send: openssl 3.6, curl on macOS, Alpine and CentOS 7, BusyBox wget, Go, Java 17, node, python. Only macOS's curl offers a weak suite. |

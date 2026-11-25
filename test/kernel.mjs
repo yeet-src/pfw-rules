@@ -23,7 +23,7 @@ const root = new URL("../", import.meta.url);
  * `reassemble N;` follows. Ports below 1024 need root, or a namespace where
  * net.ipv4.ip_unprivileged_port_start is 0, which in-namespace.sh sets. */
 const PORTS = {"ai/litellm-guardrails.pfc": 4000, "ai/monai-label.pfc": 8000, "apps/confluence-remote-api.pfc": 8090, "apps/roller-xmlrpc.pfc": 8080, "cms/php-object-injection.pfc": 80, "http/crawlers.pfc": 80, "http/h2c.pfc": 80, "runtimes/aspnet-anticsrf.pfc": 80, "runtimes/log4shell.pfc": 8080, "runtimes/php2shell.pfc": 80, "runtimes/tomcat-strict-path.pfc": 8080, "tls/legacy-clients.pfc": 443,
-  "apps/plex-timeline-protocol.pfc": 32400, "runtimes/struts-method-prefix.pfc": 8080, "apps/ahsaycbs-update-receivers.pfc": 80, "ftp/proftpd-mod-copy.pfc": 21, "apps/onlyoffice-encrypted-upload.pfc": 80};
+  "apps/plex-timeline-protocol.pfc": 32400, "runtimes/struts-method-prefix.pfc": 8080, "apps/ahsaycbs-update-receivers.pfc": 80, "ftp/proftpd-mod-copy.pfc": 21, "apps/onlyoffice-encrypted-upload.pfc": 80, "apps/grafana-secrets.pfc": 3000};
 let PORT = 0;
 const only = process.argv.slice(2);
 const hex = (s) => Buffer.from(s, "latin1").toString("hex");
@@ -206,6 +206,25 @@ try {
   await withPolicy("apps/onlyoffice-encrypted-upload.pfc", { strict: 1 }, async () => {
     await blocked("strict=1 resets a chunked body", [`POST /upload/k/u/1 HTTP/1.1\r\nHost: t\r\nTransfer-Encoding: chunked\r\n\r\n`]);
     await carried("strict=1 carries an ordinary upload", segs(upload(5000)));
+  });
+
+  await withPolicy("apps/grafana-secrets.pfc", {}, async () => {
+    const R = "/apis/notifications.alerting.grafana.app/v1beta1/namespaces/default/receivers";
+    const json = (t, b) => `POST ${t} HTTP/1.1\r\nHost: t\r\nContent-Type: application/json\r\nContent-Length: ${b.length}\r\n\r\n${b}`;
+    const dash = json("/api/dashboards/db", JSON.stringify({ dashboard: { title: "big", panels: [{ type: "text", options: { content: pad(20_000) } }] } }));
+    await carried("ordinary pages, a session and a look-alike cookie, a new contact point tested", [get("/login"), get("/api/user", "Cookie: grafana_session=0123abcd; my_login_error=1\r\n"), json(`${R}/-/test`, "{}"), get(R)]);
+    await carried("a 20 kB dashboard save", segs(dash));
+    await blocked("the login page with login_error", [get("/login", "Cookie: login_error=0123456789abcdef\r\n")]);
+    await blocked("the cookie name split mid-word, a space before the '='", [`GET /login HTTP/1.1\r\nHost: t\r\nCookie: a=1; login_er`, `ror =0123\r\n\r\n`]);
+    await blocked("after 3 kB of other cookies, the ';' in the segment before", [`GET /login HTTP/1.1\r\nHost: t\r\nCookie: `, ...segs("c=x; ".repeat(600)), `login_error=0123\r\n\r\n`]);
+    await blocked("login_error after 12 kB of ordinary requests", [...Array.from({ length: 30 }, (_, i) => get(`/d/dash-${i}`, `X-Pad: ${pad(350)}\r\n`)), get("/login", "Cookie: login_error=0123\r\n")]);
+    await blocked("testing a saved contact point", [json(`${R}/ZW1wdHk/test`, "{}")]);
+    await blocked("the route encoded and split across three segments", [`POST ${R}/ZW1wdHk%2`, `Fte%7`, `3t HTTP/1.1\r\nHost: t\r\nContent-Length: 2\r\n\r\n{}`]);
+    await blocked("after a 20 kB dashboard save on the connection", [...segs(dash), json(`${R}/ZW1wdHk/test`, "{}")]);
+  });
+  await withPolicy("apps/grafana-secrets.pfc", { block_test: 0 }, async () => {
+    await carried("block_test=0 carries a test of a saved contact point", [`POST /apis/notifications.alerting.grafana.app/v1beta1/namespaces/default/receivers/ZW1wdHk/test HTTP/1.1\r\nHost: t\r\nContent-Length: 2\r\n\r\n{}`]);
+    await blocked("block_test=0 still resets login_error", [get("/login", "Cookie: login_error=0123\r\n")]);
   });
 
   PORT = PORTS["http/h2c.pfc"];
