@@ -1,0 +1,214 @@
+// @description Resets NFSv4.1 sessions that ask nfsd for a tiny reply cache.
+// @patches Linux nfsd (NFSv4.1, 4.2) from 3.16 until the November 2026 fixes
+// @cve CVE-2026-99362
+// @severity critical
+// @tags nfs, linux, kernel, rce
+// @knob port       The NFS port to guard.
+// @knob floor      Raises the smallest cache a session may ask for.
+// @knob fragments  1 lets through a call sent as several RPC fragments.
+//
+// Fixed in Linux 5.10.275, 5.15.226, 6.1.193, 6.6.163, 6.12.117, 6.18.61,
+// 7.3.2 and 7.4 ("nfsd: preflight SEQUENCE replies before accepting a
+// slot"). A distribution kernel has its own number: read its advisory.
+//
+// A client opens an NFSv4.1 session with CREATE_SESSION, and in it says how
+// large a reply the server should keep for replay, ca_maxresponsesize_cached.
+// nfsd sizes each slot of its reply cache from that number and, in the
+// affected kernels, can later copy more into a slot than the slot holds:
+// kernel memory is written past the end of an allocation, by a client that
+// has not logged in and has mounted nothing. The fix makes nfsd check the
+// reply against the limit first. This refuses the session instead: one that
+// asks for a cache smaller than 2560 bytes never reaches the server. nfsd
+// keeps at most 2128 bytes of a reply whatever is asked, and Linux's client
+// asks for 7584.
+//
+//   nfsd_session_cache  a CREATE_SESSION that asks for a fore-channel
+//                       ca_maxresponsesize_cached below 2560, wherever in
+//                       a COMPOUND it stands; and, with `floor` set higher,
+//                       one below `floor` where a client puts it
+//   nfsd_fragmented     an NFSv4 COMPOUND call whose RPC record is not sent
+//                       whole, in one fragment: the rest of it arrives where
+//                       this cannot follow
+//   nfsd_long_auth      one whose credential or verifier is longer than the
+//                       400 bytes RFC 5531 allows. nfsd reads such a call,
+//                       and its header could then outgrow what is read here
+//
+// CREATE_SESSION is read twice over.
+//
+// By its shape, anywhere in the stream: the operation's number, 43, and
+// thirty-two bytes on, a cache size under 2560. nfsd takes the operation
+// first in a COMPOUND, or at any depth behind a SEQUENCE, and what stands
+// between is forty-odd other operations this does not parse; the shape needs
+// none of them parsed. So that file data is not taken for it, the shape also
+// asks what nfsd asks before it opens a session: a client id that is not
+// zero (nfsd's begin with its boot time), flags that are a small number,
+// and request and response sizes that are not zero.
+//
+// By the call's header, where a client puts it: the twenty bytes every NFSv4
+// COMPOUND call has after its transaction id (a call, RPC version 2, program
+// 100003, version 4, procedure 1), then over the credential, the verifier
+// and the tag by their lengths, as the server does, to the first operation,
+// or the second after a SEQUENCE. That reading has the exact number, so it
+// is the one `floor` moves; and it is what finds the calls the other two
+// rules judge. With krb5i the arguments are eight bytes on, and that is
+// allowed for.
+//
+// Checked against the kernel's own client and server, Linux 6.10: a mount
+// with vers=4.1 and one with vers=4.2 were recorded on their way to nfsd
+// (test/real/nfs.mjs, which CI runs again on every push). The client sends
+// each call as one fragment, with an empty tag, CREATE_SESSION alone in its
+// COMPOUND, and asks for a cache of several kilobytes, the size of the
+// largest reply it wants replayed. The source of the same client says so
+// (encode_create_session, fs/nfs/nfs4xdr.c): 7584 bytes from that kernel.
+// nfsd itself grants no more than 2128, whatever is asked. The same nfsd
+// was asked how it frames a call: it reads one sent as two fragments, a tag
+// of 128 bytes and no longer, and a credential of 800 bytes. And with the
+// policy on a loopback, Linux 6.12: mounts with vers=4.1 and vers=4.2, 64 MB
+// written and read back the same and 200 small files, nothing reset but the
+// three calls sent to be. No other vendor's client was run, and no affected
+// kernel was attacked.
+//
+// The cost: a client that really does ask for a cache under 2560 bytes
+// cannot open a session and so cannot mount with NFSv4.1 or 4.2. A size of
+// zero is allowed by the protocol and means "cache nothing"; a client that
+// sends it is refused too. Run the policy in shadow first and look for a
+// count on nfsd_session_cache from your own clients. `pfw knob set floor`
+// raises the line and cannot lower it: 2560 is written into the shape. A
+// WRITE whose data lines up as that shape is reset as well: 43 as a
+// big-endian number, then small numbers and non-zero ones in the right
+// places, which a table of big-endian integers can do and zeros, text and
+// compressed data do not. A client that splits its calls into several RPC fragments
+// is reset by nfsd_fragmented until `pfw knob set fragments 1`, and its
+// split calls are then not read: leave that knob alone unless a client of
+// yours needs it. A file written to the share that itself holds NFS calls,
+// a packet capture say, can be taken for the calls in it. And it is work:
+// every segment is searched for a call, and one that holds a call is
+// searched a dozen times more to find the first. Over loopback, in a VM,
+// writing 64 MB to a mount and reading it back took 0.6 seconds without the
+// policy and 2.2 with it. Measure it on your own link before a busy server
+// depends on it.
+//
+// This is not the fix. The fix is the kernel. Without either, turning
+// NFSv4.1 and 4.2 off closes it too (vers4.1=n and vers4.2=n in
+// /etc/nfs.conf): NFSv3 and NFSv4.0 have no sessions.
+//
+// Not covered:
+//   - a call sent as three or more RPC fragments, the first too short to
+//     hold its own header: neither reading sees a call there
+//   - with `floor` raised, a CREATE_SESSION between 2560 and `floor` that is
+//     further into a COMPOUND than second
+//   - Kerberos with privacy (krb5p), where the arguments are encrypted; a
+//     client needs a ticket to send that
+//   - NFS over RDMA or TLS (RPC-with-TLS): neither is readable here
+//   - a call whose header is cut by the move of the reassembly window, and
+//     more calls in one window than it walks (four runs of 64)
+//   - NFS over UDP, on a server that has it turned on: TCP only is read
+//   - a session opened before the policy was applied. Restart nfsd, or
+//     reboot, to be rid of sessions that predate it
+
+// Reassembly follows port 2049 only. With the `port` knob set to anything
+// else, packets are judged one at a time and a call split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 2049;
+
+// call, RPC version 2, program 100003 (NFS), version 4, procedure 1 (COMPOUND)
+pattern call = { 0, 0, 0, 0, 0, 0, 0, 2, 0, 1, 0x86, 0xa3, 0, 0, 0, 4, 0, 0, 0, 1 };
+// CREATE_SESSION asking for under 2560 bytes: 43; a client id whose first
+// word is not zero, its second, the sequence; flags; the header padding; a
+// request size and a response size, neither zero; then the cache size. A
+// regex here can name a byte from 0 to 9 (\0 to \t) and no other small
+// range, which is where 2560, ten times 256, comes from, and why flags of
+// 8 and 9, which nfsd refuses, are read as flags.
+regex small = "\0\0\0\+([^\0]...|\0[^\0]..|\0\0[^\0].|\0\0\0[^\0]).{8}\0\0\0[\0-\t].{4}([^\0]...|\0[^\0]..|\0\0[^\0].|\0\0\0[^\0])([^\0]...|\0[^\0]..|\0\0[^\0].|\0\0\0[^\0])\0\0[\0-\t].";
+// One past the first `call` at or after p, or 0. A scan reports where a
+// pattern last matched, so the first is found by narrowing: each step looks
+// at the front of what is left and, finding nothing, moves on by all of it
+// but the 19 bytes a match could still begin in. The pattern cannot overlap
+// itself, so the 39 bytes left at the end hold it once.
+fn first(p) {
+  if (!(within(p, 4096) & call)) return 0;
+  if (!(within(p, 2048) & call)) p = p + 2029;
+  if (!(within(p, 1024) & call)) p = p + 1005;
+  if (!(within(p, 531) & call)) p = p + 512;
+  if (!(within(p, 275) & call)) p = p + 256;
+  if (!(within(p, 147) & call)) p = p + 128;
+  if (!(within(p, 83) & call)) p = p + 64;
+  if (!(within(p, 51) & call)) p = p + 32;
+  if (!(within(p, 35) & call)) p = p + 16;
+  if (!(within(p, 27) & call)) p = p + 8;
+  if (!(within(p, 23) & call)) p = p + 4;
+  if (!(within(p, 21) & call)) p = p + 2;
+  if (!(within(p, 20) & call)) p = p + 1;
+  if (!(within(p, 39) & call)) return 0;
+  return after(call);
+}
+
+// q is one past the procedure number: the credential starts here.
+fn judge(q) {
+  let cl = be32(q + 4);
+  // RFC 5531 allows 400 bytes; nfsd reads more, and a header that long
+  // would not fit the window
+  if (cl > 400) decide rst("nfsd_long_auth", 0);
+  cl = cl + 3 & 0xfffffffc;                     // padded to four bytes
+  let v = q + 8 + cl;
+  let vl = be32(v + 4);
+  if (vl > 400) decide rst("nfsd_long_auth", 0);
+  vl = vl + 3 & 0xfffffffc;
+  let t = v + 8 + vl;
+  // RPCSEC_GSS with integrity: a length and a sequence number come first
+  if (be32(q) == 6) { if (be32(q + 20) == 2) t = t + 8; }
+  let tl = be32(t);
+  if (tl > 128) return 0;                       // nfsd refuses a longer tag
+  tl = tl + 3 & 0xfffffffc;
+  let s = t + 4 + tl;
+  if (s + 12 > end) return 0;                   // not all here yet
+  if (be32(s) == 0) return 0;                   // NFSv4.0 has no sessions
+  let op = be32(s + 8);
+  let a = s + 12;
+  if (op == 53) {                               // SEQUENCE: 32 bytes of arguments
+    if (s + 48 > end) return 0;
+    op = be32(s + 44);
+    a = s + 48;
+  }
+  if (op != 43) return 0;
+  if (a + 32 > end) return 0;
+  if (be32(a + 28) < knob("floor") ?? 2560) decide rst("nfsd_session_cache", 0);
+  return 0;
+}
+
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 2049) decide pass;
+  mask m = scan(payload, 4096);
+  if (m & small) decide rst("nfsd_session_cache", 0);
+  // most segments of a large read or write hold no call at all
+  if (!(m & call)) decide pass;
+
+  let p = payload;
+  repeat (4) {
+    let q = first(p);
+    if (q != 0) {
+      p = q;
+      // the record marker is four bytes before the transaction id
+      if (q >= payload + 28) {
+        let r = q - 28;
+        repeat (64) {
+          if (r + 28 <= end) {
+            if (be32(r + 8) == 0 && be32(r + 12) == 2 && be32(r + 16) == 100003 && be32(r + 20) == 4 && be32(r + 24) == 1) {
+              if (be32(r) < 0x80000000) {
+                if (knob("fragments") != 1) decide rst("nfsd_fragmented", 0);
+              }
+              judge(r + 28);
+            }
+            let n = be32(r);
+            n = n & 0x7fffffff;
+            r = r + 4 + n;
+          }
+        }
+      } else {
+        judge(q);
+      }
+    }
+  }
+  decide pass;
+}

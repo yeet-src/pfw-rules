@@ -120,17 +120,23 @@ it accepts, and those answers are the cases:
 | Plex Media Server 1.43.5 | which spellings of the `protocol` parameter a timeline subscription reads |
 | ProFTPD 1.3.8 with mod_copy | which spellings of `SITE CPFR` it recognises, and the Telnet bytes it strips |
 | OpenJDK 17's Base64 decoders | that the Java4Shell shape is never valid Base64 |
+| Linux's NFS client and nfsd | what a mount's CREATE_SESSION asks for, and how nfsd frames a call: fragments, the tag's limit, long credentials |
 | openssl 3.6, curl, python, node | the ClientHellos they send (`test/fixtures/clienthello-*.bin`) |
 
-Three of these are asked again on every push, by the scripts in `test/real/`
-and the `real-servers` job: Struts 2.3.28, ProFTPD and Plex Media Server are
+Four of these are asked again on every push, by the scripts in `test/real/`.
+In the `real-servers` job Struts 2.3.28, ProFTPD and Plex Media Server are
 started in containers and each is asked which spellings it reads, with
 requests that do no harm (a method the action does not have, a protocol the
-server refuses, a command that wants a login first). When a server starts
-reading a request differently, that job fails.
+server refuses, a command that wants a login first). In the `nfs` job the
+runner's own kernel serves an export and mounts it, as NFSv4.1 and as 4.2,
+through a relay that keeps what the client sent: the session it asks for has
+to stay above the floor `apps/nfsd-session-cache.pfc` sets, or the policy
+would cut every mount. When a server or a client starts behaving differently,
+its job fails.
 
 ```sh
 docker run -d -p 8080:8080 vulhub/struts2:2.3.28 && node test/real/struts.mjs 8080
+sudo node test/real/nfs.mjs 2049   # Linux, with nfsd exporting an fsid=0 directory to 127.0.0.1, `insecure`
 ```
 
 None of this is a run of an exploit against a vulnerable build. It shows that
