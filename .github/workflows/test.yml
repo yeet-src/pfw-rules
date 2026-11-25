@@ -19,14 +19,13 @@ name: test
 # A second job asks real .NET Framework, on Windows, what the token that
 # runtimes/aspnet-anticsrf.pfc lets through actually looks like.
 #
-# A third starts the real servers three policies were written against and
+# A third starts the real servers four policies were written against and
 # asks each which spellings of a request it reads (test/real/). Harmless
 # requests only: a method name the action does not have, a protocol the
 # server refuses, a command that wants a login first.
-#
-# A fourth mounts an NFS export of the runner's own kernel with the runner's
-# own client and reads what the client sent (test/real/nfs.mjs): what
-# apps/nfsd-session-cache.pfc refuses has to be nothing a real mount sends.
+# It also mounts an NFS export of the runner's own kernel with the runner's
+# own client and reads what the client sent: what apps/nfsd-session-cache.pfc
+# refuses has to be nothing a real mount sends.
 
 on:
   push:
@@ -148,7 +147,7 @@ jobs:
           .\layout.exe
           exit $LASTEXITCODE
 
-  # Three policies match what a server accepts, not what an advisory printed.
+  # Four policies match what a server accepts, not what an advisory printed.
   # What each server accepts is asked of it here, so a release that reads a
   # request differently fails this job instead of going unnoticed.
   real-servers:
@@ -184,21 +183,11 @@ jobs:
           node test/real/plex.mjs 32400 plex
           curl -s http://127.0.0.1:32400/identity | grep -o 'version="[^"]*"' || true
 
-  # apps/nfsd-session-cache.pfc refuses an NFSv4.1 session that asks for a
-  # small reply cache. What the kernel's client asks for, and how its server
-  # frames a call, are questions about Linux, so they are asked of the
-  # runner's: a mount with vers=4.1 and one with vers=4.2, recorded on the
-  # way to nfsd. Nothing here attacks anything.
-  nfs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '24'
-
-      - name: Serve an export from the runner's kernel
+      # The fourth is not a container: apps/nfsd-session-cache.pfc is about
+      # the kernel's NFS server and what the kernel's client asks of it, so
+      # the runner's own kernel serves an export and mounts it, with vers=4.1
+      # and vers=4.2, through a relay that keeps what the client sent.
+      - name: Serve an NFS export from the runner's kernel
         run: |
           set -euo pipefail
           sudo apt-get update -qq
