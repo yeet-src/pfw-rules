@@ -160,7 +160,7 @@ jobs:
             proftpd -v
             exec proftpd -n'
 
-      - name: Which spellings of method: Struts reads
+      - name: Which spellings of the method prefix Struts reads
         run: node test/real/struts.mjs 8080
 
       - name: Which spellings of SITE CPFR ProFTPD takes
