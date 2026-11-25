@@ -26,6 +26,11 @@ pick the one for the thing you cannot upgrade yet.
 | Java, any application | `runtimes/java4shell.pfc`; with an old Log4j, `runtimes/log4shell.pfc`; on Tomcat, `runtimes/tomcat-strict-path.pfc` |
 | Confluence Data Center | `apps/confluence-remote-api.pfc` |
 | Apache Roller | `apps/roller-xmlrpc.pfc` |
+| Struts 2 with Dynamic Method Invocation on | `runtimes/struts-method-prefix.pfc` |
+| Plex Media Server | `apps/plex-timeline-protocol.pfc` |
+| ONLYOFFICE Document Server | `apps/onlyoffice-encrypted-upload.pfc` |
+| AhsayCBS | `apps/ahsaycbs-update-receivers.pfc` |
+| ProFTPD with mod_copy | `ftp/proftpd-mod-copy.pfc` |
 | Nextcloud with the built-in Collabora server | `apps/nextcloud-builtin-code.pfc` |
 | a legacy ASP.NET site using Idunno.AntiCsrf | `runtimes/aspnet-anticsrf.pfc` |
 | nginx or Apache httpd with HTTP/2 or HTTP/3 on | `http/h2c.pfc`, `http/quic.pfc` |
@@ -59,6 +64,9 @@ One product, one endpoint, one bug.
 | [`apps/confluence-remote-api.pfc`](apps/confluence-remote-api.pfc) | Confluence Data Center 1.x–9.x with the Remote API on. CVE-2026-90436, Apache Axis 1.x. In CISA KEV. | Requests for the SOAP API (`soap-axis1`) and the XML-RPC API (`/rpc/xmlrpc`). | 8090 |
 | [`apps/roller-xmlrpc.pfc`](apps/roller-xmlrpc.pfc) | Apache Roller 4.0.0–6.1.4. CVE-2026-129448. In CISA KEV. | Requests for `/roller-services/xmlrpc`. | 8080 |
 | [`apps/nextcloud-builtin-code.pfc`](apps/nextcloud-builtin-code.pfc) | Nextcloud's built-in Collabora server (richdocumentscode) before 26.4.303. CVE-2026-110447. In CISA KEV. | Requests for the app's `proxy.php`. | 80 |
+| [`apps/plex-timeline-protocol.pfc`](apps/plex-timeline-protocol.pfc) | Plex Media Server before 1.43.3.10861. CVE-2026-96652, the first step of the Plex2Shell chain. In CISA KEV. | Requests whose `protocol` parameter holds more than a bare word: a colon, a slash, a percent sign. | 32400 |
+| [`apps/onlyoffice-encrypted-upload.pfc`](apps/onlyoffice-encrypted-upload.pfc) | ONLYOFFICE Document Server 5.1.5–5.6.2. CVE-2021-3199. In CISA KEV. | Uploads that begin `ENCRYPTED;` and then name anything but a file extension; with `strict` set, compressed and chunked request bodies as well. | 80 |
+| [`apps/ahsaycbs-update-receivers.pfc`](apps/ahsaycbs-update-receivers.pfc) | AhsayCBS up to 9.15.2.69 and 10.3.4.44. CVE-2026-105134. In CISA KEV. | Requests that name `UpdateReceivers`, the replication endpoint the exploit chain ends in. | 80 |
 
 ### AI tooling
 
@@ -85,6 +93,7 @@ A language runtime, library or server that every application on it shares.
 | [`runtimes/node2shell.pfc`](runtimes/node2shell.pfc) | Node.js before 22.23.4, 24.22.1, 26.12.1. CVE-2026-111497, the bundled Brotli decoder. In CISA KEV. | Requests whose body is Brotli-compressed: a `Content-Encoding` header whose whole value is `br`. | 3000 |
 | [`runtimes/java4shell.pfc`](runtimes/java4shell.pfc) | OpenJDK 17.0.6+, 21, 25, 27 on x86-64 with AVX-512 VBMI. CVE-2026-114938. | Base64 of the one shape that reaches the decoder bug: a 1–3 character tail ending in `=` after whole 64-character blocks. No encoder produces it. | 8080 |
 | [`runtimes/aspnet-anticsrf.pfc`](runtimes/aspnet-anticsrf.pfc) | Idunno.AntiCsrf 0.9.1, an abandoned ASP.NET library. CVE-2026-131914. Exploited; there will be no fix. | A `__CSRFTOKEN` form field holding anything but the serialized string the module itself writes. | 80 |
+| [`runtimes/struts-method-prefix.pfc`](runtimes/struts-method-prefix.pfc) | Struts 2.3.20–2.3.28 with Dynamic Method Invocation on. CVE-2016-3081 (S2-032). In CISA KEV. | A `method:` parameter or multipart field followed by anything that is not a method name. | 8080 |
 | [`runtimes/log4shell.pfc`](runtimes/log4shell.pfc) | Log4j 2.0-beta9–2.14.1. CVE-2021-44228, CVE-2021-45046. | `${jndi`, `${` with a built-in lookup name, and `${name:-value}`, raw, percent-encoded or as JSON `\u` escapes. | 8080 |
 | [`runtimes/tomcat-strict-path.pfc`](runtimes/tomcat-strict-path.pfc) | Any application on Tomcat. Hardening, no single CVE. | Paths Tomcat rewrites before routing: `;parameters`, `//`, `/./`, `/../`, percent-encoded letters. | 8080 |
 
@@ -95,6 +104,12 @@ A language runtime, library or server that every application on it shares.
 | [`http/h2c.pfc`](http/h2c.pfc) | nginx 1.9.5–1.31.8 and Apache httpd 2.4.55–2.4.70 with HTTP/2. CVE-2026-123007, CVE-2026-123633, CVE-2026-119618. | Cleartext HTTP/2: the client preface and the `Upgrade: h2c` handshake. | 80 |
 | [`http/quic.pfc`](http/quic.pfc) | nginx 1.25.0–1.31.8 with HTTP/3 enabled. CVE-2026-121810. | QUIC handshakes over UDP, so HTTP/3 never starts and clients use TCP. It drops; UDP has no reset. | 443/udp |
 | [`http/crawlers.pfc`](http/crawlers.pfc) | A site that does not want to be crawled for training. | Requests from GPTBot, ClaudeBot and Bytespider, by user-agent. | 80 |
+
+### FTP
+
+| policy | shields | what it resets | port |
+|---|---|---|---|
+| [`ftp/proftpd-mod-copy.pfc`](ftp/proftpd-mod-copy.pfc) | ProFTPD 1.3.5 with mod_copy. CVE-2015-3306. In CISA KEV. | Control connections that send `SITE CPFR` or `SITE CPTO`, in any case, with Telnet control bytes between the letters or without. | 21 |
 
 ### TLS
 
@@ -123,8 +138,10 @@ request shapes it does not cover. Upgrade anyway.
 
 **Plaintext HTTP/1 only.** A policy reads the bytes on the wire, so it belongs
 on the hop behind the TLS terminator. It sees nothing on a TLS port, over
-HTTP/2, on a FastCGI socket or on an AJP port. `tls/legacy-clients.pfc` is the
-exception: it reads the one part of TLS that is in the clear, the handshake.
+HTTP/2, on a FastCGI socket or on an AJP port. Two are exceptions:
+`tls/legacy-clients.pfc` reads the one part of TLS that is in the clear, the
+handshake, and `ftp/proftpd-mod-copy.pfc` reads an FTP control connection,
+until the client turns TLS on with `AUTH TLS`.
 
 **Applying one resets the connections it guards.** Connections already open
 on the policy's port are reset when it is applied, because a stream first seen
@@ -136,7 +153,8 @@ of these cannot have both yet.
 **Each has a cost, and it is written down.** The endpoint blocks stop the
 legitimate use of that endpoint: blog clients that post to Roller over
 XML-RPC, Confluence SOAP integrations, the guardrail tester in LiteLLM's admin
-UI, document editing through Nextcloud's built-in Collabora. `log4shell`
+UI, document editing through Nextcloud's built-in Collabora, changes to an
+AhsayCBS replication, file copies over FTP with mod_copy. `log4shell`
 resets `${HOME:-/root}` in a posted shell script. `h2c` breaks
 a port that is meant to carry cleartext HTTP/2, gRPC above all. Read the
 policy's comments for its own list, and for the knob that relaxes it.
@@ -167,6 +185,11 @@ The cases come from running the real software and recording what it accepts:
 | `java4shell` | The shape shirudo's `java-base64` guard refuses inside the JVM, and OpenJDK 17: its decoder refuses every form of it, and no encoder output of 1 to 5,000 bytes has it. Not run on an affected x86-64 JVM. |
 | `aspnet-anticsrf` | Mandiant's description of how the module writes its token, and real .NET Framework on a Windows runner in CI (`test/dotnet/TokenLayout.cs`): what that token looks like, that no other type looks like it, and that what follows a string is not read. The module itself was not run. |
 | `monai-label`, `litellm-guardrails` | FastAPI on uvicorn, the stack both run on: how paths are routed and queries decoded. Neither product was run. |
+| `struts-method-prefix` | Struts 2.3.28 on Jetty, an affected build with Dynamic Method Invocation on: which spellings of the `method:` prefix it reads, from a query, a form body and a multipart field. Asked with ordinary method names; no exploit was sent. |
+| `plex-timeline-protocol` | Plex Media Server 1.43.5, the fixed build, with a player registered: which spellings of the `protocol` parameter it reads, by the refusals in its log. No recorded session of a real Plex client was replayed. |
+| `proftpd-mod-copy` | ProFTPD 1.3.8 with mod_copy: which spellings of the two commands it recognises, the Telnet control bytes it strips out of a command among them. 1.3.5 was not run. |
+| `onlyoffice-encrypted-upload` | The source of ONLYOFFICE server 5.6.3.1 and of its fix: how the marker is compared and where the extension ends. No Document Server was run. |
+| `ahsaycbs-update-receivers` | Nothing but the advisories, which name the path, and Tomcat 9.0 for its spellings. AhsayCBS is commercial and was not run. |
 | `h2c` | nginx 1.27 and httpd 2.4.71 with cleartext HTTP/2 enabled. |
 | `quic` | The QUIC Initial packet a real curl sends with `--http3-only`. That a refused client falls back to TCP was not tested. |
 | `legacy-clients` | The ClientHellos twelve real client stacks send: openssl 3.6, curl on macOS, Alpine and CentOS 7, BusyBox wget, Go, Java 17, node, python. Only macOS's curl offers a weak suite. |

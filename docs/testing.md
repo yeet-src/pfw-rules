@@ -116,8 +116,22 @@ it accepts, and those answers are the cases:
 | Apache 2.4 with mod_php | which path spellings execute a PHP file |
 | nginx 1.27, httpd 2.4.71 | how cleartext HTTP/2 is started |
 | `unserialize()` in PHP 8.3 | which strings become an object, and through which transports |
+| Struts 2.3.28 on Jetty | which spellings of the `method:` prefix are read, and from where |
+| Plex Media Server 1.43.5 | which spellings of the `protocol` parameter a timeline subscription reads |
+| ProFTPD 1.3.8 with mod_copy | which spellings of `SITE CPFR` it recognises, and the Telnet bytes it strips |
 | OpenJDK 17's Base64 decoders | that the Java4Shell shape is never valid Base64 |
 | openssl 3.6, curl, python, node | the ClientHellos they send (`test/fixtures/clienthello-*.bin`) |
+
+Three of these are asked again on every push, by the scripts in `test/real/`
+and the `real-servers` job: Struts 2.3.28, ProFTPD and Plex Media Server are
+started in containers and each is asked which spellings it reads, with
+requests that do no harm (a method the action does not have, a protocol the
+server refuses, a command that wants a login first). When a server starts
+reading a request differently, that job fails.
+
+```sh
+docker run -d -p 8080:8080 vulhub/struts2:2.3.28 && node test/real/struts.mjs 8080
+```
 
 None of this is a run of an exploit against a vulnerable build. It shows that
 a policy resets the request shapes the software accepts and the advisory
