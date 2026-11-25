@@ -23,7 +23,7 @@ const root = new URL("../", import.meta.url);
  * `reassemble N;` follows. Ports below 1024 need root, or a namespace where
  * net.ipv4.ip_unprivileged_port_start is 0, which in-namespace.sh sets. */
 const PORTS = {"ai/litellm-guardrails.pfc": 4000, "ai/monai-label.pfc": 8000, "apps/confluence-remote-api.pfc": 8090, "apps/roller-xmlrpc.pfc": 8080, "cms/php-object-injection.pfc": 80, "http/crawlers.pfc": 80, "http/h2c.pfc": 80, "runtimes/aspnet-anticsrf.pfc": 80, "runtimes/log4shell.pfc": 8080, "runtimes/php2shell.pfc": 80, "runtimes/tomcat-strict-path.pfc": 8080, "tls/legacy-clients.pfc": 443,
-  "apps/plex-timeline-protocol.pfc": 32400, "runtimes/struts-method-prefix.pfc": 8080, "apps/ahsaycbs-update-receivers.pfc": 80, "ftp/proftpd-mod-copy.pfc": 21, "apps/nfsd-session-cache.pfc": 2049, "apps/onlyoffice-encrypted-upload.pfc": 80, "apps/grafana-secrets.pfc": 3000};
+  "apps/plex-timeline-protocol.pfc": 32400, "runtimes/struts-method-prefix.pfc": 8080, "apps/ahsaycbs-update-receivers.pfc": 80, "ftp/proftpd-mod-copy.pfc": 21, "apps/nfsd-session-cache.pfc": 2049, "apps/onlyoffice-encrypted-upload.pfc": 80, "apps/grafana-secrets.pfc": 3000, "runtimes/react2shell.pfc": 3000};
 let PORT = 0;
 const only = process.argv.slice(2);
 const hex = (s) => Buffer.from(s, "latin1").toString("hex");
@@ -253,6 +253,23 @@ try {
   await withPolicy("apps/grafana-secrets.pfc", { block_test: 0 }, async () => {
     await carried("block_test=0 carries a test of a saved contact point", [`POST /apis/notifications.alerting.grafana.app/v1beta1/namespaces/default/receivers/ZW1wdHk/test HTTP/1.1\r\nHost: t\r\nContent-Length: 2\r\n\r\n{}`]);
     await blocked("block_test=0 still resets login_error", [get("/login", "Cookie: login_error=0123\r\n")]);
+  });
+
+  await withPolicy("runtimes/react2shell.pfc", {}, async () => {
+    const RB = "----WebKitFormBoundaryx8jO2oVc6SWP3Sad";
+    const form = (zero, one = "{}", lines = "Next-Action: x\r\n") => { const body = `--${RB}\r\nContent-Disposition: form-data; name="0"\r\n\r\n${zero}\r\n--${RB}\r\nContent-Disposition: form-data; name="1"\r\n\r\n${one}\r\n--${RB}--\r\n`;
+      return `POST / HTTP/1.1\r\nHost: t\r\n${lines}Content-Type: multipart/form-data; boundary=${RB}\r\nContent-Length: ${body.length}\r\n\r\n${body}`; };
+    const u16 = (s) => Buffer.from(s, "utf16le").toString("latin1");
+    await carried("a server action and a form action", [`POST / HTTP/1.1\r\nHost: t\r\nNext-Action: x\r\nContent-Type: text/plain;charset=UTF-8\r\nContent-Length: 27\r\n\r\n["hello",{"n":1,"s":"$$1"}]`, form('["$K1"]', "hello")]);
+    await carried("a 300 kB upload after them", segs(upload(300_000)));
+    await blocked("$1:constructor:constructor", [form('["$1:constructor:constructor"]')]);
+    const cut = (s, mark, ...at) => { const i = s.indexOf(mark), o = []; let p = 0; for (const a of at) { o.push(s.slice(p, i + a)); p = i + a; } return [...o, s.slice(p)]; };
+    await blocked("the reference split across three segments", cut(form('["$1:__proto__:then"]'), ":__proto__", 2, 6));
+    await blocked("\\u0063 split inside the escape", cut(form('["$1:\\u0063onstructor"]'), "\\u0063", 3));
+    await blocked("in a UTF-16LE part, split between a letter and its zero", cut(form(u16('["$1:constructor:constructor"]')).replace('name="0"\r\n', 'name="0"\r\nContent-Type: text/plain; charset=utf-16le\r\n'), ":\0c", 3));
+    await blocked("after a 20 kB upload on the same connection", [...segs(upload(20_000)), form('["$1:constructor:constructor"]')]);
+    await blocked("past 6 kB of padding in an earlier field", [`POST / HTTP/1.1\r\nHost: t\r\nNext-Action: x\r\nContent-Type: multipart/form-data; boundary=${RB}\r\n\r\n--${RB}\r\nContent-Disposition: form-data; name="p"\r\n\r\n`, ...segs(pad(6000)), `\r\n--${RB}\r\nContent-Disposition: form-data; name="0"\r\n\r\n["$1:constructor:constructor"]\r\n`]);
+    await blocked("Transfer-Encoding, split in the name", [`POST / HTTP/1.1\r\nHost: t\r\nNext-Action: x\r\nTransfer-Enc`, `oding: chunked\r\n\r\n`]);
   });
 
   PORT = PORTS["http/h2c.pfc"];
