@@ -16,6 +16,10 @@ export default function ({ f, run, stream, ok, progs, bytes, show, root, readFil
   run(f, "a prompt that pastes a whole request, line ends and all", chat("POST /guardrails/test_custom_code HTTP/1.1\r\nHost: litellm\r\n\r\n{}"), "pass", web);
   run(f, "the same text in a plain-text body, one line", post("/v1/completions", "Content-Type: text/plain\r\n", "Why does POST /guardrails/test_custom_code HTTP/1.1 return 403?"), "pass", web);
   run(f, "a query padded to push the end of the line away", `POST /guardrails/test_custom_code?x=${"a".repeat(300)}`, "rst(litellm_guardrail_test)", web);
+  /* uvicorn (httptools) strips a #fragment before routing, so these reach the handler too. */
+  run(f, "a fragment after the path", "POST /guardrails/test_custom_code#x HTTP/1.1\r\nHost: x\r\n\r\n", "rst(litellm_guardrail_test)", web);
+  run(f, "a fragment then a query", "POST /guardrails/test_custom_code#x?a=1 HTTP/1.1\r\nHost: x\r\n\r\n", "rst(litellm_guardrail_test)", web);
+  run(f, "a fragment padded to push the end of the line away", `POST /guardrails/test_custom_code#${"a".repeat(300)}`, "rst(litellm_guardrail_test)", web);
   run(f, "lower-case post, which the route refuses", "post /guardrails/test_custom_code HTTP/1.1\r\nHost: x\r\n\r\n", "pass", web);
   run(f, "another case of the path, which the route answers 404", post("/Guardrails/Test_Custom_Code", "", "{}"), "pass", web);
   run(f, "a prompt that quotes the path", post("/v1/chat/completions", "Content-Type: application/json\r\n", `{"messages":[{"role":"user","content":"what does /guardrails/test_custom_code do in LiteLLM?"}]}`), "pass", web);
