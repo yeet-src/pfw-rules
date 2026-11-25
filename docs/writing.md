@@ -16,6 +16,7 @@ what it does not decide, it must pass.
 | `baseline/` | policies that decide nothing about content |
 | `http/` | rules about HTTP itself, whatever serves it |
 | `tls/` | rules about the TLS handshake, the part a filter can read |
+| `ftp/` | FTP servers: the control connection, while it is in the clear |
 | `runtimes/` | a language runtime, library or server every app on it shares: PHP, the JVM, Log4j, Tomcat |
 | `cms/` | content management systems and their plugins |
 | `ai/` | model servers, proxies and labelling tools |

@@ -1,0 +1,57 @@
+// @description Resets Struts `method:` parameters that hold more than a method name.
+// @patches Apache Struts 2.3.20 to 2.3.28, except 2.3.20.3 and 2.3.24.3
+// @cve CVE-2016-3081
+// @severity critical
+// @tags struts, java, rce
+// @knob port  The port to guard.
+//
+// S2-032. Fixed in Struts 2.3.20.3, 2.3.24.3 and 2.3.28.1.
+//
+// With Dynamic Method Invocation on, a parameter named `method:NAME` tells
+// Struts which method of the action to call, and the affected versions
+// evaluate NAME as an expression instead of looking it up. The fix keeps
+// only names made of letters, digits and `. _ ! / -`, and this asks the same
+// of the request:
+//
+//   struts_method  a parameter or multipart field named `method:` followed by
+//                  anything outside that set before the name ends
+//
+// Checked against Struts 2.3.28 on Jetty, with ordinary method names only (a
+// name the action does not have is refused, which is how it could be asked):
+//   - the prefix is read from the query, from a form body and from a
+//     multipart field name, first parameter or not
+//   - in a query or form body the name is percent-decoded, so `method%3a`,
+//     `%6dethod:` and `metho%64:` are the same parameter: each letter is
+//     matched in either form, and a `%` inside the method name is reset
+//     rather than decoded
+//   - `method:+name` is read with the plus as a space, and is reset
+//   - a multipart name is read quoted or bare, with spaces around the `=` and
+//     inside the opening quote; in single quotes, after a backslash, or as
+//     `name*=` it is not
+//   - `Method:`, a `;` before it, a header and a cookie are not read; this
+//     ignores case, which only resets more
+// No exploit was sent to it.
+//
+// Ordinary Dynamic Method Invocation passes: `method:save`, `method:save=Go`,
+// `method:save.x=12` from an image button. So does the other spelling,
+// `action!method.action`, which is not this bug.
+//
+// The cost: a form or JSON body with a line that begins `method:` and then a
+// quote mark or other punctuation, with no space between, is reset.
+//
+// One gap: a legal method name longer than 256 bytes with the rest after it,
+// laid across the move of the reassembly window, is not seen.
+//
+// Plaintext HTTP/1 only: put it behind the TLS terminator.
+nocase;
+// Reassembly follows port 8080 only. With the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 8080;
+regex method = "([?&\n]|name[ \t]*=[ \t]*\"?[ \t]*)(m|%6d)(e|%65)(t|%74)(h|%68)(o|%6f)(d|%64)(:|%3a)[a-z0-9._!/-]*[^a-z0-9._!/=& \r\n\"-]";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 8080) decide pass;
+  if (scan(payload, 4096) & method) decide rst("struts_method", 0);
+  decide pass;
+}
