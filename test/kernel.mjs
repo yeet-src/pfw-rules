@@ -23,7 +23,7 @@ const root = new URL("../", import.meta.url);
  * `reassemble N;` follows. Ports below 1024 need root, or a namespace where
  * net.ipv4.ip_unprivileged_port_start is 0, which in-namespace.sh sets. */
 const PORTS = {"ai/litellm-guardrails.pfc": 4000, "ai/monai-label.pfc": 8000, "apps/confluence-remote-api.pfc": 8090, "apps/roller-xmlrpc.pfc": 8080, "cms/php-object-injection.pfc": 80, "http/crawlers.pfc": 80, "http/h2c.pfc": 80, "runtimes/aspnet-anticsrf.pfc": 80, "runtimes/log4shell.pfc": 8080, "runtimes/php2shell.pfc": 80, "runtimes/tomcat-strict-path.pfc": 8080, "tls/legacy-clients.pfc": 443,
-  "apps/plex-timeline-protocol.pfc": 32400, "runtimes/struts-method-prefix.pfc": 8080, "apps/ahsaycbs-update-receivers.pfc": 80, "ftp/proftpd-mod-copy.pfc": 21, "apps/onlyoffice-encrypted-upload.pfc": 80, "apps/grafana-secrets.pfc": 3000};
+  "apps/plex-timeline-protocol.pfc": 32400, "runtimes/struts-method-prefix.pfc": 8080, "apps/ahsaycbs-update-receivers.pfc": 80, "ftp/proftpd-mod-copy.pfc": 21, "apps/nfsd-session-cache.pfc": 2049, "apps/onlyoffice-encrypted-upload.pfc": 80, "apps/grafana-secrets.pfc": 3000};
 let PORT = 0;
 const only = process.argv.slice(2);
 const hex = (s) => Buffer.from(s, "latin1").toString("hex");
@@ -193,6 +193,34 @@ try {
     await blocked("Telnet bytes between the letters, split across segments", ["S\xff\xf4I\xff", "\xf4TE \xff\xfb", "\x01C\xff\xf2PFR /etc/passwd\r\n"]);
     await blocked("200 Telnet sequences before the second word", ["SITE ", "\xff\xf4".repeat(100), "\xff\xf4".repeat(100), "CPFR /x\r\n"]);
     await blocked("after a login and 12 kB of commands", ["USER jo\r\n", "PASS secret\r\n", ...Array.from({ length: 300 }, (_, i) => `MDTM a-rather-long-file-name-number-${i}.txt\r\n`).join("").match(/[^]{1,1400}/g), "SITE CPFR /home/jo/a\r\n"]);
+  });
+
+  await withPolicy("apps/nfsd-session-cache.pfc", {}, async () => {
+    /* RPC is binary: the builders are the cases file's, and each segment goes out as the bytes it is */
+    const { rec, call, createSession, sequence, putrootfh, getfh, getattr, write, linux } = (await import(new URL("test/cases/apps/nfsd-session-cache.mjs", root))).wire;
+    const l1 = (b) => Buffer.from(b).toString("latin1");
+    const small = l1(rec(call([sequence, putrootfh, getfh, getattr])));
+    const bad = l1(rec(call([createSession(80)])));
+    await carried("the session Linux's client opens, then twenty calls", [l1(rec(linux("4.1"))), ...Array(20).fill(small)]);
+    await carried("a 300 kB WRITE", segs(l1(rec(call([sequence, write(Buffer.from(noise(300_000), "latin1"))])))));
+    await blocked("a CREATE_SESSION asking for an 80-byte cache", [bad]);
+    await blocked("the same, changed from Linux's own", [l1(rec(linux("4.2", 80)))]);
+    await blocked("split across two segments, inside the header", [bad.slice(0, 50), bad.slice(50)]);
+    await blocked("split inside the number itself", [bad.slice(0, bad.indexOf("\0\0\0\x2b") + 34), bad.slice(bad.indexOf("\0\0\0\x2b") + 34)]);
+    await blocked("a few bytes at a time", bad.match(/[^]{1,7}/g));
+    await blocked("behind other calls in one segment", [small.repeat(5) + bad]);
+    await blocked("after 12 kB of ordinary calls", [...segs(small.repeat(100)), bad]);
+    await blocked("after a 300 kB WRITE", [...segs(l1(rec(call([sequence, write(Buffer.from(noise(300_000), "latin1"))])))), bad]);
+    await blocked("sixth in its COMPOUND", [l1(rec(call([sequence, putrootfh, getfh, getattr, getattr, createSession(80)])))]);
+    await blocked("behind a 300 kB WRITE in the same COMPOUND", [...segs(l1(rec(call([sequence, putrootfh, write(Buffer.from(noise(300_000), "latin1")), createSession(80)]))))]);
+    await blocked("deep, and a few bytes at a time", l1(rec(call([sequence, putrootfh, getfh, createSession(80)]))).match(/[^]{1,7}/g));
+    await blocked("sent as two RPC fragments", [l1(Buffer.concat([rec(call([createSession(80)]).subarray(0, 60), false), rec(call([createSession(80)]).subarray(60))]))]);
+  });
+  await withPolicy("apps/nfsd-session-cache.pfc", { floor: 8192 }, async () => {
+    const { rec, call, createSession, linux } = (await import(new URL("test/cases/apps/nfsd-session-cache.mjs", root))).wire;
+    const l1 = (b) => Buffer.from(b).toString("latin1");
+    await carried("floor knob at 8192: a cache of 8192 is let through", [l1(rec(call([createSession(8192)])))]);
+    await blocked("floor knob at 8192: Linux's own 7584 is not", [l1(rec(linux("4.1")))]);
   });
 
   await withPolicy("apps/onlyoffice-encrypted-upload.pfc", {}, async () => {

@@ -32,6 +32,7 @@ pick the one for the thing you cannot upgrade yet.
 | ONLYOFFICE Document Server | `apps/onlyoffice-encrypted-upload.pfc` |
 | AhsayCBS | `apps/ahsaycbs-update-receivers.pfc` |
 | ProFTPD with mod_copy | `ftp/proftpd-mod-copy.pfc` |
+| a Linux NFS server (nfsd) on a kernel without the November 2026 fixes | `apps/nfsd-session-cache.pfc` |
 | Nextcloud with the built-in Collabora server | `apps/nextcloud-builtin-code.pfc` |
 | a legacy ASP.NET site using Idunno.AntiCsrf | `runtimes/aspnet-anticsrf.pfc` |
 | nginx or Apache httpd with HTTP/2 or HTTP/3 on | `http/h2c.pfc`, `http/quic.pfc` |
@@ -67,6 +68,7 @@ One product, one endpoint, one bug.
 | [`apps/nextcloud-builtin-code.pfc`](apps/nextcloud-builtin-code.pfc) | Nextcloud's built-in Collabora server (richdocumentscode) before 26.4.303. CVE-2026-110447. In CISA KEV. | Requests for the app's `proxy.php`. | 80 |
 | [`apps/plex-timeline-protocol.pfc`](apps/plex-timeline-protocol.pfc) | Plex Media Server before 1.43.3.10861. CVE-2026-96652, the first step of the Plex2Shell chain. In CISA KEV. | Requests whose `protocol` parameter holds more than a bare word: a colon, a slash, a percent sign. | 32400 |
 | [`apps/onlyoffice-encrypted-upload.pfc`](apps/onlyoffice-encrypted-upload.pfc) | ONLYOFFICE Document Server 5.1.5–5.6.2. CVE-2021-3199. In CISA KEV. | Uploads that begin `ENCRYPTED;` and then name anything but a file extension; with `strict` set, compressed and chunked request bodies as well. | 80 |
+| [`apps/nfsd-session-cache.pfc`](apps/nfsd-session-cache.pfc) | The Linux kernel's NFS server serving NFSv4.1 or 4.2, from 3.16 until 5.10.275, 5.15.226, 6.1.193, 6.6.163, 6.12.117, 6.18.61 and 7.3.2. CVE-2026-99362 (NFS2ROOT). | NFSv4.1 sessions whose CREATE_SESSION asks for a cached reply under 2560 bytes, wherever in a COMPOUND it stands (Linux's client asks for 7584, and nfsd keeps at most 2128); calls sent as several RPC fragments, or with a credential over 400 bytes. | 2049 |
 | [`apps/ahsaycbs-update-receivers.pfc`](apps/ahsaycbs-update-receivers.pfc) | AhsayCBS up to 9.15.2.69 and 10.3.4.44. CVE-2026-105134. In CISA KEV. | Requests that name `UpdateReceivers`, the replication endpoint the exploit chain ends in. | 80 |
 | [`apps/grafana-secrets.pfc`](apps/grafana-secrets.pfc) | Grafana before 13.3.2, 13.2.7, 13.1.11, 13.0.14, 12.4.16. CVE-2026-107561, CVE-2026-88960; Grafana has not said which ID is which fix, so both are covered. | Any request carrying a `login_error` cookie, which `/login` decrypted and displayed; tests of a saved contact point, which could carry its stored secrets elsewhere. | 3000 |
 
@@ -143,7 +145,8 @@ on the hop behind the TLS terminator. It sees nothing on a TLS port, over
 HTTP/2, on a FastCGI socket or on an AJP port. Two are exceptions:
 `tls/legacy-clients.pfc` reads the one part of TLS that is in the clear, the
 handshake, and `ftp/proftpd-mod-copy.pfc` reads an FTP control connection,
-until the client turns TLS on with `AUTH TLS`.
+until the client turns TLS on with `AUTH TLS`. `apps/nfsd-session-cache.pfc`
+is not about HTTP at all: it reads the RPC calls of NFS.
 
 **Applying one resets the connections it guards.** Connections already open
 on the policy's port are reset when it is applied, because a stream first seen
@@ -194,6 +197,7 @@ The cases come from running the real software and recording what it accepts:
 | `onlyoffice-encrypted-upload` | The source of ONLYOFFICE server 5.6.3.1 and of its fix: how the marker is compared and where the extension ends. No Document Server was run. |
 | `ahsaycbs-update-receivers` | Nothing but the advisories, which name the path, and Tomcat 9.0 for its spellings. AhsayCBS is commercial and was not run. |
 | `grafana-secrets` | Grafana 13.3.1 itself: which `Cookie` header spellings Go's `Request.Cookie` reads a named cookie from, and which spellings of the receiver test route reach its handler. Percent-encoding anywhere in the route does; `//`, `/./` and a trailing slash do not. |
+| `nfsd-session-cache` | The kernel's own NFS client and server, Linux 6.10 and the runner's kernel in CI: two real mounts, vers=4.1 and 4.2, recorded on their way to nfsd. The client's CREATE_SESSION asks for 7584 bytes, as one fragment with an empty tag; nfsd reads a call in two fragments, a tag of 128 bytes and a credential of 800. On Linux 6.12, mounts through a loopback the policy was enforcing on: 64 MB written and read back, nothing reset but the calls sent to be. No affected kernel was attacked and no other vendor's client was run. |
 | `h2c` | nginx 1.27 and httpd 2.4.71 with cleartext HTTP/2 enabled. |
 | `quic` | The QUIC Initial packet a real curl sends with `--http3-only`. That a refused client falls back to TCP was not tested. |
 | `legacy-clients` | The ClientHellos twelve real client stacks send: openssl 3.6, curl on macOS, Alpine and CentOS 7, BusyBox wget, Go, Java 17, node, python. Only macOS's curl offers a weak suite. |
