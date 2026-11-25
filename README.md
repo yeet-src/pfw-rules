@@ -30,6 +30,7 @@ pick the one for the thing you cannot upgrade yet.
 | Plex Media Server | `apps/plex-timeline-protocol.pfc` |
 | ONLYOFFICE Document Server | `apps/onlyoffice-encrypted-upload.pfc` |
 | AhsayCBS | `apps/ahsaycbs-update-receivers.pfc` |
+| Grafana | `apps/grafana-login-error.pfc` |
 | ProFTPD with mod_copy | `ftp/proftpd-mod-copy.pfc` |
 | Nextcloud with the built-in Collabora server | `apps/nextcloud-builtin-code.pfc` |
 | a legacy ASP.NET site using Idunno.AntiCsrf | `runtimes/aspnet-anticsrf.pfc` |
@@ -66,6 +67,7 @@ One product, one endpoint, one bug.
 | [`apps/nextcloud-builtin-code.pfc`](apps/nextcloud-builtin-code.pfc) | Nextcloud's built-in Collabora server (richdocumentscode) before 26.4.303. CVE-2026-110447. In CISA KEV. | Requests for the app's `proxy.php`. | 80 |
 | [`apps/plex-timeline-protocol.pfc`](apps/plex-timeline-protocol.pfc) | Plex Media Server before 1.43.3.10861. CVE-2026-96652, the first step of the Plex2Shell chain. In CISA KEV. | Requests whose `protocol` parameter holds more than a bare word: a colon, a slash, a percent sign. | 32400 |
 | [`apps/onlyoffice-encrypted-upload.pfc`](apps/onlyoffice-encrypted-upload.pfc) | ONLYOFFICE Document Server 5.1.5–5.6.2. CVE-2021-3199. In CISA KEV. | Uploads that begin `ENCRYPTED;` and then name anything but a file extension; with `strict` set, compressed and chunked request bodies as well. | 80 |
+| [`apps/grafana-login-error.pfc`](apps/grafana-login-error.pfc) | Grafana before 12.4.16, 13.0.14, 13.1.11, 13.2.7 and 13.3.2. One of CVE-2026-107561 and CVE-2026-88960; Grafana has not yet said which. Not in CISA KEV. | Requests that carry a `login_error` cookie, which the login page decrypts with the instance's secrets key and prints. | 3000 |
 | [`apps/ahsaycbs-update-receivers.pfc`](apps/ahsaycbs-update-receivers.pfc) | AhsayCBS up to 9.15.2.69 and 10.3.4.44. CVE-2026-105134. In CISA KEV. | Requests that name `UpdateReceivers`, the replication endpoint the exploit chain ends in. | 80 |
 
 ### AI tooling
@@ -154,7 +156,8 @@ of these cannot have both yet.
 legitimate use of that endpoint: blog clients that post to Roller over
 XML-RPC, Confluence SOAP integrations, the guardrail tester in LiteLLM's admin
 UI, document editing through Nextcloud's built-in Collabora, changes to an
-AhsayCBS replication, file copies over FTP with mod_copy. `log4shell`
+AhsayCBS replication, file copies over FTP with mod_copy, the reason a
+Grafana OAuth login failed. `log4shell`
 resets `${HOME:-/root}` in a posted shell script. `h2c` breaks
 a port that is meant to carry cleartext HTTP/2, gRPC above all. Read the
 policy's comments for its own list, and for the knob that relaxes it.
@@ -188,6 +191,7 @@ The cases come from running the real software and recording what it accepts:
 | `struts-method-prefix` | Struts 2.3.28 on Jetty, an affected build with Dynamic Method Invocation on: which spellings of the `method:` prefix it reads, from a query, a form body and a multipart field. Asked with ordinary method names; no exploit was sent. |
 | `plex-timeline-protocol` | Plex Media Server 1.43.5, the fixed build, with a player registered: which spellings of the `protocol` parameter it reads, by the refusals in its log. No recorded session of a real Plex client was replayed. |
 | `proftpd-mod-copy` | ProFTPD 1.3.8 with mod_copy: which spellings of the two commands it recognises, the Telnet control bytes it strips out of a command among them. 1.3.5 was not run. |
+| `grafana-login-error` | Grafana 13.3.1, handed a `login_error` cookie it had set itself after a failed OAuth login: it decrypts it and shows the message, in which spellings of the Cookie header. And Grafana 13.3.2, which no longer reads that cookie. No ciphertext from anywhere else was sent. |
 | `onlyoffice-encrypted-upload` | The source of ONLYOFFICE server 5.6.3.1 and of its fix: how the marker is compared and where the extension ends. No Document Server was run. |
 | `ahsaycbs-update-receivers` | Nothing but the advisories, which name the path, and Tomcat 9.0 for its spellings. AhsayCBS is commercial and was not run. |
 | `h2c` | nginx 1.27 and httpd 2.4.71 with cleartext HTTP/2 enabled. |

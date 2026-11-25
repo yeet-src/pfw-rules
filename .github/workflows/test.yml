@@ -19,10 +19,11 @@ name: test
 # A second job asks real .NET Framework, on Windows, what the token that
 # runtimes/aspnet-anticsrf.pfc lets through actually looks like.
 #
-# A third starts the real servers three policies were written against and
+# A third starts the real servers four policies were written against and
 # asks each which spellings of a request it reads (test/real/). Harmless
 # requests only: a method name the action does not have, a protocol the
-# server refuses, a command that wants a login first.
+# server refuses, a command that wants a login first, a cookie the server
+# set itself.
 
 on:
   push:
@@ -137,7 +138,7 @@ jobs:
           .\layout.exe
           exit $LASTEXITCODE
 
-  # Three policies match what a server accepts, not what an advisory printed.
+  # Four policies match what a server accepts, not what an advisory printed.
   # What each server accepts is asked of it here, so a release that reads a
   # request differently fails this job instead of going unnoticed.
   real-servers:
@@ -149,9 +150,17 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Start Struts 2.3.28, ProFTPD with mod_copy, and Plex Media Server
+      - name: Start Struts 2.3.28, ProFTPD with mod_copy, Plex Media Server and Grafana
         run: |
           set -euo pipefail
+          # Generic OAuth pointed at nothing: a login through it fails, which
+          # is what makes Grafana set the cookie the policy is about.
+          for v in 13.3.1:3000 13.3.2:3001; do
+            docker run -d --name "grafana-${v%:*}" -p "127.0.0.1:${v#*:}:3000" \
+              -e GF_AUTH_GENERIC_OAUTH_ENABLED=true -e GF_AUTH_GENERIC_OAUTH_CLIENT_ID=x -e GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET=x \
+              -e GF_AUTH_GENERIC_OAUTH_AUTH_URL=http://127.0.0.1:9/auth -e GF_AUTH_GENERIC_OAUTH_TOKEN_URL=http://127.0.0.1:9/token \
+              -e GF_AUTH_GENERIC_OAUTH_API_URL=http://127.0.0.1:9/api "grafana/grafana:${v%:*}"
+          done
           docker run -d --name struts -p 127.0.0.1:8080:8080 vulhub/struts2:2.3.28
           docker run -d --name plex -p 127.0.0.1:32400:32400 plexinc/pms-docker:latest
           docker run -d --name proftpd -p 127.0.0.1:2121:21 debian:12-slim sh -c '
@@ -167,6 +176,11 @@ jobs:
         run: |
           node test/real/proftpd.mjs 2121
           docker logs proftpd 2>&1 | grep -i "proftpd version" || true
+
+      - name: Which spellings of its login_error cookie Grafana 13.3.1 decrypts, and that 13.3.2 does not
+        run: |
+          node test/real/grafana.mjs 3000
+          node test/real/grafana.mjs 3001 fixed
 
       - name: Which spellings of protocol Plex reads
         run: |
