@@ -120,6 +120,13 @@ jobs:
           sudo sysctl -q -w net.ipv4.ip_unprivileged_port_start=0
           PFW="$(command -v pfw)" SCRATCH_HOME="$(mktemp -d)" node test/e2e.mjs
 
+      # install.sh logged the runner in, which registers it as a host of the
+      # account. The runner is thrown away, so take the host with it:
+      # otherwise every run leaves one behind. Harmless where there was no key.
+      - name: Log this runner out
+        if: always()
+        run: yeet logout --delete-host || true
+
   # runtimes/aspnet-anticsrf.pfc lets through one shape of token and resets
   # every other. Whether that shape is the one the module really writes is a
   # question about Microsoft's .NET Framework, so it is asked there.
