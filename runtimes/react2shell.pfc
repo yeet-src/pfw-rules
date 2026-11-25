@@ -1,0 +1,87 @@
+// @description Resets React Server Components replies that walk to a prototype.
+// @patches react-server-dom-* 19.0.0-19.2.0, Next.js 15.0.0-16.0.6
+// @cve CVE-2025-55182
+// @severity critical
+// @tags http, react, nextjs, rce
+// @knob port  The port to guard.
+//
+// React2Shell. React's Flight decoder reads a server function's arguments
+// from the request body and resolves references such as "$1:a:b" by walking
+// property names. Before 19.0.1, 19.1.2 and 19.2.1 the walk did not check
+// that a property was the object's own, so "$1:constructor:constructor"
+// reached Function, and one unauthenticated POST ran code. Next.js bundles
+// its own copy: the app router from 15.0.0 to 16.0.6, and canaries from
+// 14.3.0-canary.77, are affected; 15.0.5, 15.1.9, 15.2.6, 15.3.6, 15.4.8,
+// 15.5.7 and 16.0.7 are the first fixed. In CISA KEV.
+//
+//   react2shell_gadget   a reference path that names constructor or __proto__
+//                        (":constructor:", ":__proto__\"", ...), the step every
+//                        public chain takes to reach Function
+//   react2shell_escape   a JSON \u escape of a character the gadget is spelled
+//                        with, or of the backslash, "u" or hex digit that would
+//                        spell another escape
+//   react2shell_chunked  a Transfer-Encoding header
+//
+// Why the escape rule. A fake chunk's value is a JSON string that is parsed
+// again, so a reference can sit any number of levels deep and be escaped at
+// each: "\u0063" on the wire is "c" one level in and "c" at the
+// next. No pattern spells every such form. But React's client builds its
+// reply with JSON.stringify, which escapes only control characters and lone
+// surrogates, never a printable ASCII one; and if the wire has no such escape,
+// no level below it can have one either, so the gadget is in the body as
+// written. Both rules are also matched in UTF-16LE, see below.
+//
+// Checked against Next.js 16.0.6 with React 19.2.0, by references that throw
+// while walking ("$1:a:a", which hangs the request) or do not ("$1:x"):
+//
+//   Every route takes a server action, with Next-Action in any case and any
+//   value, an empty one included; rsc-action-id and x-action-id do nothing on
+//   Next. Without the header, a multipart form with a $ACTION_REF_ field is
+//   decoded too, and so is a body of any other type, as UTF-8. So the body is
+//   scanned whatever the headers say.
+//
+//   JSON escapes are decoded in the key, the "$" and the ":" alike.
+//
+//   A multipart part with Content-Type charset utf-16le, utf16le, ucs2 or
+//   ucs-2, in any case and quoted or not, is decoded as UTF-16LE: the gadget
+//   arrives as ":\0c\0o\0n\0..." and is matched in that form too. Next's
+//   busboy reads any other charset as Latin-1, UTF-8 or base64 (which turns
+//   the value into base64 and cannot carry a reference); a charset on the
+//   request's own Content-Type, Content-Transfer-Encoding and a gzip
+//   Content-Encoding are ignored.
+//
+//   A chunked body is decoded, and chunk framing can land in the middle of
+//   any token. Node takes "chunked" after other codings, in any case and
+//   after a tab, and answers 400 to a request whose codings do not end in
+//   chunked, to a folded or quoted value and to a space before the colon. So
+//   the header name alone is enough, and it cannot be padded apart.
+//
+// The cost. No browser sends a request with Transfer-Encoding, but a script
+// streaming an upload to this port does, and is reset. So is a body that
+// writes c or similar on purpose (a code snippet typed into a form
+// keeps its backslash as "\\u0063", which still contains it), or that has
+// ":constructor:" in it. Encoders that escape < > & for HTML (<,
+// >, &), and escapes of anything above 0x7f, are left alone.
+//
+// Not covered: HTTP/2 and anything inside TLS; put pfw behind the TLS
+// terminator. React Server Components in other frameworks (React Router,
+// Waku, Parcel) decode the same way and are covered on their port, but only
+// Next was run. Upgrade: the patched decoder is the fix.
+//
+// Reassembly follows port 3000 only. With the port knob set to anything
+// else, packets are judged one at a time and a token split across two is
+// missed: to guard another port properly, change the number here as well.
+nocase;
+reassemble 3000;
+regex gadget = ":(constructor|__proto__)[:\"\\]|:\0(c\0o\0n\0s\0t\0r\0u\0c\0t\0o\0r\0|_\0_\0p\0r\0o\0t\0o\0_\0_\0)[:\"\\]\0";
+regex escape = "\\u00(22|3[0-9a]|4[1-6]|5[cf]|6[0-9a-f]|7[0-5])|\\\0u\00\00\0(2\02\0|3\0[0-9a]\0|4\0[1-6]\0|5\0[cf]\0|6\0[0-9a-f]\0|7\0[0-5]\0)";
+regex chunked = "\ntransfer-encoding:";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 3000) decide pass;
+  mask m = scan(payload, 4096);
+  if (any(m, gadget)) decide rst("react2shell_gadget", 0);
+  if (any(m, escape)) decide rst("react2shell_escape", 0);
+  if (any(m, chunked)) decide rst("react2shell_chunked", 0);
+  decide pass;
+}
