@@ -1,0 +1,58 @@
+// @description Resets requests that bring Grafana a `login_error` cookie.
+// @patches Grafana before 12.4.16, 13.0.14, 13.1.11, 13.2.7, 13.3.2
+// @severity high
+// @tags grafana, cookie, secrets
+// @knob port  The port to guard.
+//
+// Fixed in Grafana 12.4.16, 13.0.14, 13.1.11, 13.2.7 and 13.3.2, released
+// 2026-11-24. Grafana has published no advisory yet. The releases name
+// CVE-2026-107561 and CVE-2026-88960 for two fixes and do not say which is
+// this one, so there is no @cve line: add it when the advisory says. The fix
+// is in pkg/api/login.go (grafana/grafana commit b8e90ef).
+//
+// When a login through an OAuth provider fails, Grafana keeps the error
+// message in a cookie, `login_error`, for the login page to show. The
+// affected versions encrypt it with the instance's general secrets service,
+// and the login page decrypts whatever the cookie holds and prints it. So
+// the page decrypts, for anyone and without a login, any ciphertext that
+// instance ever produced: a data source password, an API token, a contact
+// point's credentials. The caller has to hold the ciphertext already, from a
+// copy of the database or a backup; what this bug gives them is the key's
+// work. The fix signs the message instead of encrypting it.
+//
+//   grafana_login_error  a `login_error` cookie with a value
+//
+// A cookie Grafana set itself and one that carries a stolen secret are both
+// hexadecimal ciphertext under the same key, and nothing on the wire tells
+// them apart. So every one is reset, and that is the cost: where OAuth login
+// is in use, a user whose login fails gets a reset connection instead of the
+// reason, and so does each request their browser makes for the 60 seconds
+// the cookie lasts. Where OAuth login is not in use nothing sets the cookie
+// and nothing is lost.
+//
+// Checked against Grafana 13.3.1 with a cookie it issued itself after a
+// failed login, which it decrypts and shows; and against 13.3.2, which no
+// longer reads that cookie. 13.3.1 reads it:
+//   - under any casing of the header name, with or without white space
+//     after the colon, in any of several Cookie headers
+//   - anywhere among other cookies, with or without a space after the
+//     semicolon, with a space before the `=`, with the value in double quotes
+//     or in upper-case hex
+// and does not read Login_Error, login%5Ferror, a value after a space, or a
+// cookie after a comma. The name is matched wherever it follows a colon, a
+// semicolon or white space and is given a hex value, in any case, so a body
+// that says `login_error=0` after a space is reset too.
+//
+// Plaintext HTTP/1 only: put it behind the TLS terminator.
+nocase;
+// Reassembly follows port 3000 only. With the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 3000;
+regex cookie = "[;: \t]login_error[ \t]*=[ \t]*\"?[0-9a-f]";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 3000) decide pass;
+  if (scan(payload, 4096) & cookie) decide rst("grafana_login_error", 0);
+  decide pass;
+}

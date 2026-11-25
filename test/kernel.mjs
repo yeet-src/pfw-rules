@@ -22,7 +22,8 @@ const root = new URL("../", import.meta.url);
 /* Each policy is tested on its own default port, because that is the port its
  * `reassemble N;` follows. Ports below 1024 need root, or a namespace where
  * net.ipv4.ip_unprivileged_port_start is 0, which in-namespace.sh sets. */
-const PORTS = {"ai/litellm-guardrails.pfc": 4000, "ai/monai-label.pfc": 8000, "apps/confluence-remote-api.pfc": 8090, "apps/roller-xmlrpc.pfc": 8080, "cms/php-object-injection.pfc": 80, "http/crawlers.pfc": 80, "http/h2c.pfc": 80, "runtimes/aspnet-anticsrf.pfc": 80, "runtimes/log4shell.pfc": 8080, "runtimes/php2shell.pfc": 80, "runtimes/tomcat-strict-path.pfc": 8080, "tls/legacy-clients.pfc": 443};
+const PORTS = {"ai/litellm-guardrails.pfc": 4000, "ai/monai-label.pfc": 8000, "apps/confluence-remote-api.pfc": 8090, "apps/roller-xmlrpc.pfc": 8080, "cms/php-object-injection.pfc": 80, "http/crawlers.pfc": 80, "http/h2c.pfc": 80, "runtimes/aspnet-anticsrf.pfc": 80, "runtimes/log4shell.pfc": 8080, "runtimes/php2shell.pfc": 80, "runtimes/tomcat-strict-path.pfc": 8080, "tls/legacy-clients.pfc": 443,
+  "apps/plex-timeline-protocol.pfc": 32400, "runtimes/struts-method-prefix.pfc": 8080, "apps/ahsaycbs-update-receivers.pfc": 80, "ftp/proftpd-mod-copy.pfc": 21, "apps/onlyoffice-encrypted-upload.pfc": 80, "apps/grafana-login-error.pfc": 3000};
 let PORT = 0;
 const only = process.argv.slice(2);
 const hex = (s) => Buffer.from(s, "latin1").toString("hex");
@@ -36,7 +37,8 @@ async function withPolicy(file, knobs, fn) {
   let out = "";
   child.stdout.on("data", (d) => { out += d; });
   child.stderr.on("data", (d) => { out += d; });
-  for (let i = 0; i < 150 && !/READY|COMPILE FAIL/.test(out); i++) await sleep(100);
+  /* 90 seconds, as pfw-core's own kernel tests give it: on a busy runner the first load can take most of a minute. */
+  for (let i = 0; i < 900 && !/READY|COMPILE FAIL/.test(out); i++) await sleep(100);
   if (!/READY/.test(out)) { child.kill("SIGKILL"); throw new Error(`${file}: loader never READY:\n${out.slice(-2000)}`); }
   try { return await fn(); } finally { child.kill("SIGINT"); await sleep(600); }
 }
@@ -157,6 +159,63 @@ try {
   await withPolicy("runtimes/tomcat-strict-path.pfc", { params: 1 }, async () => {
     await carried("params=1 carries ;jsessionid", [get("/login;jsessionid=0123456789ABCDEF")]);
     await blocked("params=1 still resets //", [get("/app//servlet")]);
+  });
+
+  await withPolicy("apps/plex-timeline-protocol.pfc", {}, async () => {
+    const q = "deviceClass=pc&protocolCapabilities=playback&protocolVersion=1";
+    await carried("subscribe over http, the transcoder with protocol=hls", [get(`/player/timeline/subscribe?${q}&protocol=http&port=32500&commandID=1`), get("/video/:/transcode/universal/start.m3u8?path=%2Flibrary%2Fmetadata%2F42&protocol=hls")]);
+    await carried("a 300 kB upload", segs(upload(300_000)));
+    await blocked("a URL for a protocol", [get(`/player/timeline/subscribe?${q}&protocol=http://127.0.0.1:32400/x&port=1`)]);
+    await blocked("the name and the value split across segments", [`GET /player/timeline/subscribe?${q}&proto`, `col=htt`, `p%3A%2F%2F127.0.0.1/x&port=1 HTTP/1.1\r\nHost: t\r\n\r\n`]);
+    await blocked("after 12 kB of ordinary requests on the connection", [...Array.from({ length: 30 }, (_, i) => get(`/library/metadata/${i}`, `X-Pad: ${pad(350)}\r\n`)), get(`/player/timeline/subscribe?${q}&%70rotocol=a:b`)]);
+  });
+
+  await withPolicy("runtimes/struts-method-prefix.pfc", {}, async () => {
+    await carried("ordinary dynamic method invocation", [get("/hello.action?method:execute"), `POST /hello.action HTTP/1.1\r\nHost: t\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 24\r\n\r\nname=jo&method:save=Save`]);
+    await carried("a 300 kB upload", segs(upload(300_000)));
+    await blocked("a method: parameter that is not a method name", [get("/hello.action?method:%23a")]);
+    await blocked("split inside the prefix", [`GET /hello.action?x=1&meth`, `od:`, `%23a HTTP/1.1\r\nHost: t\r\n\r\n`]);
+    await blocked("a form body in its own segment, the name encoded", [`POST /hello.action HTTP/1.1\r\nHost: t\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 17\r\n\r\n`, `%6dethod%3a%23a=1`]);
+    await blocked("a multipart field 9 kB into an upload", [...segs(upload(9000)), `--${B}\r\nContent-Disposition: form-data; name = " method:a(b)"\r\n\r\nx\r\n`]);
+  });
+
+  await withPolicy("apps/ahsaycbs-update-receivers.pfc", {}, async () => {
+    await carried("the console and another replication call", [get("/cbs/system/ShowLogon.do"), get("/rps/api/json/ListReceivers.do")]);
+    await blocked("POST /rps/api/json/UpdateReceivers.do", [`POST /rps/api/json/UpdateReceivers.do HTTP/1.1\r\nHost: t\r\n\r\n`]);
+    await blocked("the word split across segments, letters encoded", [`POST /rps/api/json/%55pdate`, `Recei`, `ver%73.do HTTP/1.1\r\nHost: t\r\n\r\n`]);
+    await blocked("after 6 kB of path parameter", [`POST /rps;`, ...segs(pad(6000)), `/api/json/UpdateReceivers.do HTTP/1.1\r\nHost: t\r\n\r\n`]);
+  });
+
+  await withPolicy("ftp/proftpd-mod-copy.pfc", {}, async () => {
+    await carried("an ordinary session", ["USER anonymous\r\n", "PASS jo@example.test\r\n", "SITE HELP\r\n", "PASV\r\n", "RETR pub/readme.txt\r\n", "\xff\xf4\xff\xf2ABOR\r\n"]);
+    await blocked("SITE CPFR", ["SITE CPFR /etc/passwd\r\n"]);
+    await blocked("SITE CPTO a byte at a time", [..."site cpto /tmp/x\r\n"]);
+    await blocked("Telnet bytes between the letters, split across segments", ["S\xff\xf4I\xff", "\xf4TE \xff\xfb", "\x01C\xff\xf2PFR /etc/passwd\r\n"]);
+    await blocked("200 Telnet sequences before the second word", ["SITE ", "\xff\xf4".repeat(100), "\xff\xf4".repeat(100), "CPFR /x\r\n"]);
+    await blocked("after a login and 12 kB of commands", ["USER jo\r\n", "PASS secret\r\n", ...Array.from({ length: 300 }, (_, i) => `MDTM a-rather-long-file-name-number-${i}.txt\r\n`).join("").match(/[^]{1,1400}/g), "SITE CPFR /home/jo/a\r\n"]);
+  });
+
+  await withPolicy("apps/onlyoffice-encrypted-upload.pfc", {}, async () => {
+    const up = (body, extra = "") => `POST /upload/k/u/1 HTTP/1.1\r\nHost: t\r\n${extra}Content-Length: ${body.length}\r\n\r\n${body}`;
+    await carried("a 300 kB image upload", segs(up(noise(300_000))));
+    await carried("an encrypted upload with an extension", segs(up("ENCRYPTED;png;" + noise(5000, 7))));
+    await carried("a chunked body, without strict", [`POST /upload/k/u/1 HTTP/1.1\r\nHost: t\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n`]);
+    await blocked("an encrypted header that names a path", [up("ENCRYPTED;/../../../tmp/x;data")]);
+    await blocked("the body in its own segments, split inside the marker", [`POST /upload/k/u/1 HTTP/1.1\r\nHost: t\r\nContent-Length: 24\r\n\r\n`, "ENCRY", "PTED;", "/../", "x;data"]);
+  });
+  await withPolicy("apps/onlyoffice-encrypted-upload.pfc", { strict: 1 }, async () => {
+    await blocked("strict=1 resets a chunked body", [`POST /upload/k/u/1 HTTP/1.1\r\nHost: t\r\nTransfer-Encoding: chunked\r\n\r\n`]);
+    await carried("strict=1 carries an ordinary upload", segs(upload(5000)));
+  });
+
+  await withPolicy("apps/grafana-login-error.pfc", {}, async () => {
+    const V = "23596d6331596d5a776347686d5a476b305a324d232a5957567a4c574e6d59672a3864644651654a79";
+    await carried("a session on a keep-alive connection", [get("/login"), get("/d/abc/overview", "Cookie: grafana_session=0123456789abcdef\r\n"), get("/api/health", "Cookie: my_login_error=1\r\n")]);
+    await carried("a 300 kB upload", segs(upload(300_000)));
+    await blocked("a login_error cookie", [get("/login", `Cookie: login_error=${V}\r\n`)]);
+    await blocked("the name split from its value across segments", [`GET /login HTTP/1.1\r\nHost: t\r\nCookie: a=b;login_`, `error =`, `"${V}"\r\n\r\n`]);
+    await blocked("after 6 kB of other cookies", [`GET /login HTTP/1.1\r\nHost: t\r\nCookie: a=`, ...segs(pad(6000)), `; login_error=${V}\r\n\r\n`]);
+    await blocked("after 12 kB of ordinary requests on the connection", [...Array.from({ length: 30 }, (_, i) => get(`/api/dashboards/uid/${i}`, `X-Pad: ${pad(350)}\r\n`)), get("/login", `Cookie: login_error=${V}\r\n`)]);
   });
 
   PORT = PORTS["http/h2c.pfc"];

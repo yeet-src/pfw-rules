@@ -1,0 +1,68 @@
+// @description Resets Plex requests whose `protocol` parameter is more than a bare word.
+// @patches Plex Media Server before 1.43.3.10861
+// @cve CVE-2026-96652
+// @severity critical
+// @tags plex, ssrf, rce
+// @knob port  The port to guard.
+//
+// Fixed in Plex Media Server 1.43.3.10861.
+//
+// The first step of the chain called Plex2Shell. A controller subscribing to
+// a player's timeline (/player/timeline/subscribe) says how the server should
+// call it back: `protocol`, and a port. The server builds the callback as
+// protocol://address:port without looking at `protocol`, so a whole URL there
+// makes the server send its POST wherever the URL says, itself on 127.0.0.1
+// included, and any X-Plex-Token value at all gets a remote caller that far.
+// The rest of the chain rides on that request: the plugin call
+// (CVE-2026-96654) and the theft of the owner's token happen over loopback,
+// inside the URL, and the last two steps (CVE-2026-96655, CVE-2026-96656)
+// need the stolen token. Stopping the first stops the chain as published; it
+// does nothing about the last two for someone who has an owner's token some
+// other way, and they are not claimed here.
+//
+//   plex_protocol  a `protocol` parameter, in a query or a form body, whose
+//                  value holds anything but letters, digits, `*`, `_` and
+//                  `-`: no colon, no slash, no percent sign
+//
+// Checked against Plex Media Server 1.43.5 (the fixed build, which refuses a
+// bad value and says so in its log, which is how it could be asked) with a
+// player registered and harmless values:
+//   - the value is percent-decoded once, so `%3A` is a colon: any `%` in it
+//     is reset
+//   - the name is percent-decoded too (%70rotocol, protoco%6C), so each
+//     letter is matched in either form. It is case-sensitive; this is not,
+//     which only resets more
+//   - of two `protocol` parameters the last one counts, so every one is
+//     judged
+//   - a header called `protocol`, `X-Plex-Protocol` or any casing of them is
+//     not read, nor is `;protocol=`, `protocol[]=` or a name with a space
+//   - everything under /player/ reaches the same handler, and so does
+//     /x/../player/, so the path is not part of the match at all
+// Whether a form body is read was not established (the fixed build stalls on
+// it), so a body that starts with the parameter is matched as well.
+//
+// The values Plex's own clients send are bare words: http and https here,
+// hls and dash to the transcoder. Those were taken from the write-ups and
+// from the server's own refusals, not from a recorded client session: shadow
+// it first. A `protocol` parameter in a request to anything else on the port
+// is held to the same rule.
+//
+// No gap from padding: letters and digits in front of the colon would have
+// to be a URL scheme the server can fetch.
+//
+// Plaintext HTTP/1 only. Plex serves TLS on the same port, 32400, and remote
+// access normally arrives that way: this reads only what reaches the server
+// in the clear, from a reverse proxy in front of it or from the local network
+// with secure connections not required.
+nocase;
+// Reassembly follows port 32400 only. With the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 32400;
+regex protocol = "[?&\n](p|%70)(r|%72)(o|%6f)(t|%74)(o|%6f)(c|%63)(o|%6f)(l|%6c)=[a-z0-9*_-]*[^a-z0-9*_& \r\n-]";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 32400) decide pass;
+  if (scan(payload, 4096) & protocol) decide rst("plex_protocol", 0);
+  decide pass;
+}
