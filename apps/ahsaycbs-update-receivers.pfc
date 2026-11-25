@@ -1,0 +1,45 @@
+// @description Resets requests for AhsayCBS's UpdateReceivers replication endpoint.
+// @patches AhsayCBS up to 9.15.2.69 and 10.3.4.44
+// @cve CVE-2026-105134
+// @severity critical
+// @tags ahsay, backup, rce
+// @knob port  The port to guard.
+//
+// Fixed by the 9.15.2.70 and 10.3.4.45 hotfixes. The earlier patches,
+// 9.15.2.59 and 10.3.4.0, did not fix it.
+//
+// /rps/api/json/UpdateReceivers.do, in the Replication Receiver, puts its
+// `random` argument into an operating-system command. It is the second half
+// of a chain: an authentication bypass in the same API (CVE-2026-105133,
+// also by way of `random`) lets a stranger call it. Nobody has published
+// which request carries the bypass, so there is nothing to match for it and
+// it is not claimed here; this takes away the endpoint the chain ends in.
+// Ahsay names no workaround. Bitdefender's and Huntress's advice is to keep
+// the management interface off the internet, which is the better answer.
+//
+// A connection is reset once it has carried the word `UpdateReceivers`, in
+// any case, with any letter percent-encoded as either case. The word alone,
+// not the whole path, because a servlet container serves
+// /rps/api;x/json//UpdateReceivers.do and its like as the same resource. The
+// cost: changing the receivers of a
+// replication through the API stops while it is applied, and a connection
+// that names the word anywhere, in a body or a Referer, is reset too.
+//
+// Not checked against the software: AhsayCBS is a commercial product and was
+// not run, the advisories name only the path, and how its server decodes a
+// path was assumed to be what Tomcat does. The default port is assumed to be
+// 80; set the `port` knob to the one in use.
+//
+// Plaintext HTTP/1 only: put it behind the TLS terminator.
+nocase;
+// Reassembly follows port 80 only. With the `port` knob set to anything
+// else, packets are judged one at a time and a signature split across two is
+// missed: to guard another port properly, change the number here as well.
+reassemble 80;
+regex receivers = "(u|%75|%55)(p|%70|%50)(d|%64|%44)(a|%61|%41)(t|%74|%54)(e|%65|%45)(r|%72|%52)(e|%65|%45)(c|%63|%43)(e|%65|%45)(i|%69|%49)(v|%76|%56)(e|%65|%45)(r|%72|%52)(s|%73|%53)";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 80) decide pass;
+  if (scan(payload, 4096) & receivers) decide rst("ahsay_update_receivers", 0);
+  decide pass;
+}
