@@ -127,7 +127,7 @@ Four of these are asked again on every push, by the scripts in `test/real/`.
 In the `real-servers` job Struts 2.3.28, ProFTPD and Plex Media Server are
 started in containers and each is asked which spellings it reads, with
 requests that do no harm (a method the action does not have, a protocol the
-server refuses, a command that wants a login first). In the `nfs` job the
+server refuses, a command that wants a login first). In the same job the
 runner's own kernel serves an export and mounts it, as NFSv4.1 and as 4.2,
 through a relay that keeps what the client sent: the session it asks for has
 to stay above the floor `apps/nfsd-session-cache.pfc` sets, or the policy
