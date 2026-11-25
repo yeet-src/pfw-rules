@@ -23,7 +23,7 @@ const root = new URL("../", import.meta.url);
  * `reassemble N;` follows. Ports below 1024 need root, or a namespace where
  * net.ipv4.ip_unprivileged_port_start is 0, which in-namespace.sh sets. */
 const PORTS = {"ai/litellm-guardrails.pfc": 4000, "ai/monai-label.pfc": 8000, "apps/confluence-remote-api.pfc": 8090, "apps/roller-xmlrpc.pfc": 8080, "cms/php-object-injection.pfc": 80, "http/crawlers.pfc": 80, "http/h2c.pfc": 80, "runtimes/aspnet-anticsrf.pfc": 80, "runtimes/log4shell.pfc": 8080, "runtimes/php2shell.pfc": 80, "runtimes/tomcat-strict-path.pfc": 8080, "tls/legacy-clients.pfc": 443,
-  "apps/plex-timeline-protocol.pfc": 32400, "runtimes/struts-method-prefix.pfc": 8080, "apps/ahsaycbs-update-receivers.pfc": 80, "ftp/proftpd-mod-copy.pfc": 21, "apps/onlyoffice-encrypted-upload.pfc": 80};
+  "apps/plex-timeline-protocol.pfc": 32400, "runtimes/struts-method-prefix.pfc": 8080, "apps/ahsaycbs-update-receivers.pfc": 80, "ftp/proftpd-mod-copy.pfc": 21, "apps/onlyoffice-encrypted-upload.pfc": 80, "apps/grafana-login-error.pfc": 3000};
 let PORT = 0;
 const only = process.argv.slice(2);
 const hex = (s) => Buffer.from(s, "latin1").toString("hex");
@@ -205,6 +205,16 @@ try {
   await withPolicy("apps/onlyoffice-encrypted-upload.pfc", { strict: 1 }, async () => {
     await blocked("strict=1 resets a chunked body", [`POST /upload/k/u/1 HTTP/1.1\r\nHost: t\r\nTransfer-Encoding: chunked\r\n\r\n`]);
     await carried("strict=1 carries an ordinary upload", segs(upload(5000)));
+  });
+
+  await withPolicy("apps/grafana-login-error.pfc", {}, async () => {
+    const V = "23596d6331596d5a776347686d5a476b305a324d232a5957567a4c574e6d59672a3864644651654a79";
+    await carried("a session on a keep-alive connection", [get("/login"), get("/d/abc/overview", "Cookie: grafana_session=0123456789abcdef\r\n"), get("/api/health", "Cookie: my_login_error=1\r\n")]);
+    await carried("a 300 kB upload", segs(upload(300_000)));
+    await blocked("a login_error cookie", [get("/login", `Cookie: login_error=${V}\r\n`)]);
+    await blocked("the name split from its value across segments", [`GET /login HTTP/1.1\r\nHost: t\r\nCookie: a=b;login_`, `error =`, `"${V}"\r\n\r\n`]);
+    await blocked("after 6 kB of other cookies", [`GET /login HTTP/1.1\r\nHost: t\r\nCookie: a=`, ...segs(pad(6000)), `; login_error=${V}\r\n\r\n`]);
+    await blocked("after 12 kB of ordinary requests on the connection", [...Array.from({ length: 30 }, (_, i) => get(`/api/dashboards/uid/${i}`, `X-Pad: ${pad(350)}\r\n`)), get("/login", `Cookie: login_error=${V}\r\n`)]);
   });
 
   PORT = PORTS["http/h2c.pfc"];
