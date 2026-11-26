@@ -122,6 +122,10 @@ export default function ({ f, run, stream, ok }) {
   run(f, "floor knob at 4096, krb5i", rec(call([createSession(4000)], { cred: gss(2), verf: cat(u32(6), opaque(Buffer.alloc(28, 7))), lead: cat(u32(200), u32(7)) })), hit, { ...nfs, knobs: { floor: 4096 } });
   run(f, "a WRITE of zeros with one 43 among them", rec(call([sequence, write(cat(Buffer.alloc(600), u32(43), Buffer.alloc(600)))])), "pass", nfs);
   run(f, "a WRITE of text about C++ and 1+1", rec(call([sequence, write(Buffer.from("int a = b+++c; // C++\n1+1=2\0\0\0+\n".repeat(60)))])), "pass", nfs);
+  run(f, "a WRITE of a table of big-endian numbers under 64 that lines up", rec(call([sequence, write(cat(...[43, 5, 9, 1, 2, 3, 50, 60, 7, 8].map(u32)))])), "pass", nfs);
+  run(f, "a request size of 63, which nfsd calls too small", rec(call([sequence, putrootfh, cat(createSession(80).subarray(0, 24), u32(63), createSession(80).subarray(28))])), "pass", nfs);
+  run(f, "a response size of 63, the same", rec(call([sequence, putrootfh, cat(createSession(80).subarray(0, 28), u32(63), createSession(80).subarray(32))])), "pass", nfs);
+  run(f, "request and response sizes of 64, the least nfsd takes", rec(call([sequence, putrootfh, cat(createSession(80).subarray(0, 24), u32(64), u32(64), createSession(80).subarray(32))])), hit, nfs);
   /* the known cost: big-endian integers that line up as the operation does */
   run(f, "a WRITE of a table of small big-endian numbers that lines up", rec(call([sequence, write(cat(...[43, 5, 9, 1, 2, 3, 500, 600, 7, 8].map(u32)))])), hit, nfs);
   run(f, "a WRITE of zeros and plus signs", rec(call([sequence, write(cat(Buffer.alloc(600), Buffer.alloc(600, 0x2b), Buffer.alloc(100)))])), "pass", nfs);

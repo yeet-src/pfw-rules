@@ -42,7 +42,7 @@
 // none of them parsed. So that file data is not taken for it, the shape also
 // asks what nfsd asks before it opens a session: a client id that is not
 // zero (nfsd's begin with its boot time), flags that are a small number,
-// and request and response sizes that are not zero.
+// and request and response sizes of at least 64 bytes.
 //
 // By the call's header, where a client puts it: the twenty bytes every NFSv4
 // COMPOUND call has after its transaction id (a call, RPC version 2, program
@@ -75,17 +75,22 @@
 // count on nfsd_session_cache from your own clients. `pfw knob set floor`
 // raises the line and cannot lower it: 2560 is written into the shape. A
 // WRITE whose data lines up as that shape is reset as well: 43 as a
-// big-endian number, then small numbers and non-zero ones in the right
-// places, which a table of big-endian integers can do and zeros, text and
-// compressed data do not. A client that splits its calls into several RPC fragments
+// big-endian number, a small number sixteen bytes on, two of 64 or more
+// after that and one under 2560 after those: a table of big-endian integers
+// can do it, and zeros, text and compressed data do not. A client that splits its calls into several RPC fragments
 // is reset by nfsd_fragmented until `pfw knob set fragments 1`, and its
 // split calls are then not read: leave that knob alone unless a client of
 // yours needs it. A file written to the share that itself holds NFS calls,
 // a packet capture say, can be taken for the calls in it. And it is work:
-// every segment is searched for a call, and one that holds a call is
-// searched a dozen times more to find the first. Over loopback, in a VM,
-// writing 64 MB to a mount and reading it back took 0.6 seconds without the
-// policy and 2.2 with it. Measure it on your own link before a busy server
+// every byte to the port goes through two automata, the one that finds
+// calls and the one that knows the shape. Over loopback, in a VM, writing
+// 64 MB to a mount and reading it back took 0.16 seconds with no firewall,
+// 0.65 with one that only reassembles the port, and 1.3 with this policy.
+// Three transfers of sixteen then stalled for ten seconds or more: a
+// segment that arrives ahead of the reassembly window is dropped for the
+// sender to send again (`reasm_held` in `pfw metrics`). That is the
+// reassembly's doing and not this policy's: one that only scanned for a
+// literal stalled as well. Measure it on your own link before a busy server
 // depends on it.
 //
 // This is not the fix. The fix is the kernel. Without either, turning
@@ -115,31 +120,16 @@ reassemble 2049;
 pattern call = { 0, 0, 0, 0, 0, 0, 0, 2, 0, 1, 0x86, 0xa3, 0, 0, 0, 4, 0, 0, 0, 1 };
 // CREATE_SESSION asking for under 2560 bytes: 43; a client id whose first
 // word is not zero, its second, the sequence; flags; the header padding; a
-// request size and a response size, neither zero; then the cache size. A
-// regex here can name a byte from 0 to 9 (\0 to \t) and no other small
-// range, which is where 2560, ten times 256, comes from, and why flags of
-// 8 and 9, which nfsd refuses, are read as flags.
-regex small = "\0\0\0\+([^\0]...|\0[^\0]..|\0\0[^\0].|\0\0\0[^\0]).{8}\0\0\0[\0-\t].{4}([^\0]...|\0[^\0]..|\0\0[^\0].|\0\0\0[^\0])([^\0]...|\0[^\0]..|\0\0[^\0].|\0\0\0[^\0])\0\0[\0-\t].";
-// One past the first `call` at or after p, or 0. A scan reports where a
-// pattern last matched, so the first is found by narrowing: each step looks
-// at the front of what is left and, finding nothing, moves on by all of it
-// but the 19 bytes a match could still begin in. The pattern cannot overlap
-// itself, so the 39 bytes left at the end hold it once.
+// request size and a response size of 64 or more, the least nfsd takes
+// (NFSD_MIN_REQ_HDR_SEQ_SZ and its twin); then the cache size. A regex here
+// can name a byte from 0 to 9 (\0 to \t) and no other small range, which is
+// where 2560, ten times 256, comes from, and why flags of 8 and 9, which
+// nfsd refuses, are read as flags.
+regex small = "\0\0\0\+([^\0]...|\0[^\0]..|\0\0[^\0].|\0\0\0[^\0]).{8}\0\0\0[\0-\t].{4}([^\0]...|\0[^\0]..|\0\0[^\0].|\0\0\0[^\0-?])([^\0]...|\0[^\0]..|\0\0[^\0].|\0\0\0[^\0-?])\0\0[\0-\t].";
+// One past the first `call` at or after p, or 0. A fresh scan remembers
+// where each pattern first matched.
 fn first(p) {
   if (!(within(p, 4096) & call)) return 0;
-  if (!(within(p, 2048) & call)) p = p + 2029;
-  if (!(within(p, 1024) & call)) p = p + 1005;
-  if (!(within(p, 531) & call)) p = p + 512;
-  if (!(within(p, 275) & call)) p = p + 256;
-  if (!(within(p, 147) & call)) p = p + 128;
-  if (!(within(p, 83) & call)) p = p + 64;
-  if (!(within(p, 51) & call)) p = p + 32;
-  if (!(within(p, 35) & call)) p = p + 16;
-  if (!(within(p, 27) & call)) p = p + 8;
-  if (!(within(p, 23) & call)) p = p + 4;
-  if (!(within(p, 21) & call)) p = p + 2;
-  if (!(within(p, 20) & call)) p = p + 1;
-  if (!(within(p, 39) & call)) return 0;
   return after(call);
 }
 
