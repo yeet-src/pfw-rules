@@ -65,4 +65,5 @@ chmod 755 "$work"
 
 sudo ip netns exec "$ns" sudo -u "$(id -un)" env HOME="$HOME" PATH="$work/bin:$PATH" YEET="$work/bin/yeet" SCRATCH_HOME="$work/home" \
 	PFW_CORE="${PFW_CORE:-}" PFW="${PFW:-}" PFW_SOURCE="${PFW_SOURCE:-}" CI="${CI:-}" YEET_API_KEY="${YEET_API_KEY:-}" \
+	${YEET_NO_ANALYTICS+YEET_NO_ANALYTICS="$YEET_NO_ANALYTICS"} \
 	sh -c 'cd "$1" && shift && exec "$@"' -- "$here" "$@"

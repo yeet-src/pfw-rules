@@ -36,6 +36,11 @@ on:
 permissions:
   contents: read
 
+# yeet's command line reports how it is used unless this is set, to anything.
+# CI is not a user: nothing here should be counted as one.
+env:
+  YEET_NO_ANALYTICS: 1
+
 concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
