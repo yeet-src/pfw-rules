@@ -1,0 +1,75 @@
+// @description Resets multipart fields that ask Rack for a legacy single-byte charset.
+// @patches Ruby before 3.3.14, 3.4.13 and 4.0.10
+// @cve CVE-2026-132825
+// @severity critical
+// @tags http, ruby, rack, rails
+// @knob port  The port to guard.
+//
+// Ruby2Shell. Changing the case of a string in ISO-8859-1, -2, -3, -4, -9,
+// -10, -13, -14, -15, -16 or Windows-1250, -1252, -1254, -1257 could write one
+// byte past the output buffer: case_map() turned the sharp s (0xDF) into two
+// bytes after checking for room for one. Ruby's advisory says this may allow
+// remote code execution. Ruby 3.2 and older are end of life and get no fix.
+//
+// A web request reaches it through Rack. Rack::MethodOverride upcases the
+// _method form field of every POST, before routing and before any CSRF
+// check; Rails puts it in front of every app that is not API-only, and
+// classic Sinatra turns it on. And Rack's multipart parser tags a field
+// with whatever charset its own Content-Type names. UTF-8 is not affected,
+// and a URL-encoded or JSON body is read as UTF-8, so a multipart field that
+// names one of those charsets is the way in. Browsers never send a
+// Content-Type on a text field. So:
+//
+//   ruby2shell_charset  a "text/plain;" and a "charset=" naming one of the
+//                       affected encodings, anywhere in the connection
+//
+// It does not depend on the field being called _method: app code that
+// changes the case of any other field has the same bug.
+//
+// Checked against Rack 3.2.9 and 2.2.21 on Ruby 3.3.8, by the encoding Rack
+// tagged a harmless field with (no overflow was triggered). Both honour
+// charset only after exactly "text/plain" and only as "charset", in lower case,
+// with the value in any case and quoted or not, and with the last of several
+// winning. Both take any of the 28 names Ruby has for the 14 encodings
+// (iso-8859-1, iso8859-1, cp1252, windows-1252, ...); Rack 3 also takes
+// "locale", "external" and "filesystem", which name the server's own locale.
+// Both strip spaces, tabs, CR, LF, NUL, \v and \f around "text/plain", the
+// name and the value, so any of them can pad it, and Rack 3 also accepts a
+// folded line. A part's headers may run to 64 kB, so the padding can be
+// longer than the 256 bytes the reassembly window keeps. The two halves are
+// therefore remembered separately for the connection, and a run of 24 or
+// more of those blanks after "text/plain" or "charset" counts as its half.
+// Rack takes the Content-Type before or after Content-Disposition, and never
+// for a part with a filename; this rule matches both ways.
+//
+// The cost. Clients that label multipart text fields with a legacy charset
+// are reset: Apache HttpClient's addTextBody() writes "text/plain;
+// charset=ISO-8859-1" by default. So are raw e-mail messages posted as a
+// field (inbound mail webhooks for Action Mailbox), and a later request on a
+// connection that earlier carried both halves. A URL-encoded body with
+// "charset=ISO-8859-1" on its own Content-Type, and "text/plain;
+// charset=utf-8", pass.
+//
+// Not covered: a single-byte string built some other way, such as app code
+// that calls force_encoding or reads a legacy-encoded file or database
+// column, then changes its case. HTTP/2 and anything inside TLS: put pfw
+// behind the TLS terminator. Upgrade Ruby: that is the fix.
+//
+// Reassembly follows port 3000 only. With the port knob set to anything
+// else, packets are judged one at a time and a token split across two is
+// missed: to guard another port properly, change the number here as well.
+nocase;
+reassemble 3000;
+regex plain = "text/plain[\s\0]*;|text/plain[\s\0]{24}";
+regex legacy = "charset[\s\0]*=[\s\0]*\"?(iso-?8859-(1|2|3|4|9)|cp125[0247]|windows-125[0247]|locale|external|filesystem)|charset[\s\0]{24}|charset[\s\0]*=[\s\0]{24}";
+filter {
+  if (proto != 6) decide pass;
+  if (dport != knob("port") ?? 3000) decide pass;
+  mask m = scan(payload, 4096);
+  // flow.r0 remembers each half once seen: the match mask covers only the
+  // current window, and padding can put the halves kilobytes apart.
+  if (any(m, plain)) flow.r0 = flow.r0 | 1;
+  if (any(m, legacy)) flow.r0 = flow.r0 | 2;
+  if (flow.r0 == 3) decide rst("ruby2shell_charset", 0);
+  decide pass;
+}

@@ -24,6 +24,7 @@ pick the one for the thing you cannot upgrade yet.
 | WordPress or Drupal | `cms/installers.pfc`; for plugins that unserialize input, `cms/php-object-injection.pfc` |
 | Node.js | `runtimes/node2shell.pfc` |
 | Next.js 15 or 16, or React Server Components | `runtimes/react2shell.pfc` |
+| Ruby: Rails, Sinatra or any Rack app | `runtimes/ruby2shell.pfc` |
 | Java, any application | `runtimes/java4shell.pfc`; with an old Log4j, `runtimes/log4shell.pfc`; on Tomcat, `runtimes/tomcat-strict-path.pfc` |
 | Confluence Data Center | `apps/confluence-remote-api.pfc` |
 | Grafana before 13.3.2, 13.2.7, 13.1.11, 13.0.14 or 12.4.16 | `apps/grafana-secrets.pfc` |
@@ -97,6 +98,7 @@ A language runtime, library or server that every application on it shares.
 | [`runtimes/php2shell.pfc`](runtimes/php2shell.pfc) | PHP before 8.2.35, 8.3.36, 8.4.27, 8.5.12. CVE-2026-109618, CVE-2026-109619. In CISA KEV. | The `PHP_SESSION_UPLOAD_PROGRESS` field; multipart with `Transfer-Encoding`; field names nested eight deep; optionally all multipart. | 80 |
 | [`runtimes/node2shell.pfc`](runtimes/node2shell.pfc) | Node.js before 22.23.4, 24.22.1, 26.12.1. CVE-2026-111497, the bundled Brotli decoder. In CISA KEV. | Requests whose body is Brotli-compressed: a `Content-Encoding` header whose whole value is `br`. | 3000 |
 | [`runtimes/react2shell.pfc`](runtimes/react2shell.pfc) | React Server Components 19.0.0–19.2.0; Next.js app router 15.0.0–16.0.6. CVE-2025-55182. In CISA KEV. | A reference that walks to `constructor` or `__proto__`; a JSON `\u` escape of a character that spells one, also in UTF-16LE; any `Transfer-Encoding`. | 3000 |
+| [`runtimes/ruby2shell.pfc`](runtimes/ruby2shell.pfc) | Ruby before 3.3.14, 3.4.13, 4.0.10, under Rack. CVE-2026-132825, the case-mapping overflow. | Multipart fields whose own `Content-Type` is `text/plain` with a legacy single-byte `charset` (ISO-8859-x, Windows-125x), however padded. | 3000 |
 | [`runtimes/java4shell.pfc`](runtimes/java4shell.pfc) | OpenJDK 17.0.6+, 21, 25, 27 on x86-64 with AVX-512 VBMI. CVE-2026-114938. | Base64 of the one shape that reaches the decoder bug: a 1–3 character tail ending in `=` after whole 64-character blocks. No encoder produces it. | 8080 |
 | [`runtimes/aspnet-anticsrf.pfc`](runtimes/aspnet-anticsrf.pfc) | Idunno.AntiCsrf 0.9.1, an abandoned ASP.NET library. CVE-2026-131914. Exploited; there will be no fix. | A `__CSRFTOKEN` form field holding anything but the serialized string the module itself writes. | 80 |
 | [`runtimes/struts-method-prefix.pfc`](runtimes/struts-method-prefix.pfc) | Struts 2.3.20–2.3.28 with Dynamic Method Invocation on. CVE-2016-3081 (S2-032). In CISA KEV. | A `method:` parameter or multipart field followed by anything that is not a method name. | 8080 |
@@ -163,9 +165,11 @@ XML-RPC, Confluence SOAP integrations, the guardrail tester in LiteLLM's admin
 UI, document editing through Nextcloud's built-in Collabora, changes to an
 AhsayCBS replication, file copies over FTP with mod_copy, the "Test"
 button on a saved Grafana contact point. `react2shell` resets chunked uploads
-to its port. `log4shell` resets `${HOME:-/root}` in a posted shell script.
-`h2c` breaks a port that is meant to carry cleartext HTTP/2, gRPC above all.
-Read the policy's comments for its own list, and for the knob that relaxes it.
+to its port. `ruby2shell` resets multipart text fields labelled ISO-8859-1,
+which Apache HttpClient sends by default. `log4shell` resets
+`${HOME:-/root}` in a posted shell script. `h2c` breaks a port that is meant
+to carry cleartext HTTP/2, gRPC above all. Read the policy's comments for its
+own list, and for the knob that relaxes it.
 
 ## How far each has been tested
 
@@ -190,6 +194,7 @@ The cases come from running the real software and recording what it accepts:
 | every policy | A recorded admin session on a real WordPress 7.1.5 (login, settings, a post written and edited, an upload, a comment): 25 requests, none reset by any policy. |
 | `node2shell` | Express 5 and Koa on Node 24: which `Content-Encoding` spellings reach the Brotli decoder. Only valid Brotli was sent, to a patched Node. |
 | `react2shell` | Next.js 16.0.6 with React 19.2.0: which bodies, headers, part charsets, JSON escapes and transfer codings reach the reference walk, by a reference that throws while walking. No exploit was sent. |
+| `ruby2shell` | Rack 3.2.9 and 2.2.21 on Ruby 3.3.8: which spellings of a multipart field's `charset` Rack tags it with, read back from a harmless field. No overflow was triggered; Rails was not run. |
 | `log4shell` | Log4j 2.14.1: which of 25 lookup spellings made the logger connect out. All 17 that did are reset. |
 | `java4shell` | The shape shirudo's `java-base64` guard refuses inside the JVM, and OpenJDK 17: its decoder refuses every form of it, and no encoder output of 1 to 5,000 bytes has it. Not run on an affected x86-64 JVM. |
 | `aspnet-anticsrf` | Mandiant's description of how the module writes its token, and real .NET Framework on a Windows runner in CI (`test/dotnet/TokenLayout.cs`): what that token looks like, that no other type looks like it, and that what follows a string is not read. The module itself was not run. |
