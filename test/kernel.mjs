@@ -23,7 +23,7 @@ const root = new URL("../", import.meta.url);
  * `reassemble N;` follows. Ports below 1024 need root, or a namespace where
  * net.ipv4.ip_unprivileged_port_start is 0, which in-namespace.sh sets. */
 const PORTS = {"ai/litellm-guardrails.pfc": 4000, "ai/monai-label.pfc": 8000, "apps/confluence-remote-api.pfc": 8090, "apps/roller-xmlrpc.pfc": 8080, "cms/php-object-injection.pfc": 80, "http/crawlers.pfc": 80, "http/h2c.pfc": 80, "runtimes/aspnet-anticsrf.pfc": 80, "runtimes/log4shell.pfc": 8080, "runtimes/php2shell.pfc": 80, "runtimes/tomcat-strict-path.pfc": 8080, "tls/legacy-clients.pfc": 443,
-  "apps/plex-timeline-protocol.pfc": 32400, "runtimes/struts-method-prefix.pfc": 8080, "apps/ahsaycbs-update-receivers.pfc": 80, "ftp/proftpd-mod-copy.pfc": 21, "apps/nfsd-session-cache.pfc": 2049, "apps/onlyoffice-encrypted-upload.pfc": 80, "apps/grafana-secrets.pfc": 3000, "runtimes/react2shell.pfc": 3000};
+  "apps/plex-timeline-protocol.pfc": 32400, "runtimes/struts-method-prefix.pfc": 8080, "apps/ahsaycbs-update-receivers.pfc": 80, "ftp/proftpd-mod-copy.pfc": 21, "apps/nfsd-session-cache.pfc": 2049, "apps/onlyoffice-encrypted-upload.pfc": 80, "apps/grafana-secrets.pfc": 3000, "runtimes/react2shell.pfc": 3000, "runtimes/ruby2shell.pfc": 3000};
 let PORT = 0;
 const only = process.argv.slice(2);
 const hex = (s) => Buffer.from(s, "latin1").toString("hex");
@@ -270,6 +270,24 @@ try {
     await blocked("after a 20 kB upload on the same connection", [...segs(upload(20_000)), form('["$1:constructor:constructor"]')]);
     await blocked("past 6 kB of padding in an earlier field", [`POST / HTTP/1.1\r\nHost: t\r\nNext-Action: x\r\nContent-Type: multipart/form-data; boundary=${RB}\r\n\r\n--${RB}\r\nContent-Disposition: form-data; name="p"\r\n\r\n`, ...segs(pad(6000)), `\r\n--${RB}\r\nContent-Disposition: form-data; name="0"\r\n\r\n["$1:constructor:constructor"]\r\n`]);
     await blocked("Transfer-Encoding, split in the name", [`POST / HTTP/1.1\r\nHost: t\r\nNext-Action: x\r\nTransfer-Enc`, `oding: chunked\r\n\r\n`]);
+  });
+
+  await withPolicy("runtimes/ruby2shell.pfc", {}, async () => {
+    const RB = "----WebKitFormBoundaryq1w2e3r4t5y6u7i8";
+    const mp = (ct, pad = "") => { const body = `--${RB}\r\nContent-Disposition: form-data; name="_method"\r\n${ct ? `Content-Type: ${ct}\r\n` : ""}\r\nput\r\n--${RB}--\r\n`;
+      return `POST /posts/1 HTTP/1.1\r\nHost: t\r\nContent-Type: multipart/form-data; boundary=${RB}\r\nContent-Length: ${body.length}\r\n\r\n${body}`; };
+    const latin1Form = `POST / HTTP/1.1\r\nHost: t\r\nContent-Type: application/x-www-form-urlencoded; charset=ISO-8859-1\r\nContent-Length: 11\r\n\r\n_method=put`;
+    await carried("a browser form and a UTF-8 text field", [mp(null), mp("text/plain; charset=utf-8")]);
+    await carried("a URL-encoded form labelled ISO-8859-1", [latin1Form]);
+    /* The halves are remembered for the connection, so these two ordinary
+     * requests on one connection are reset together: a cost the policy states. */
+    await blocked("cost: a UTF-8 text field, then an ISO-8859-1 form, on one connection", [mp("text/plain; charset=utf-8"), latin1Form]);
+    await carried("a 300 kB upload", segs(upload(300_000)));
+    await blocked("a field in windows-1252", [mp("text/plain; charset=windows-1252")]);
+    await blocked("the charset name split across segments", [`POST / HTTP/1.1\r\nHost: t\r\nContent-Type: multipart/form-data; boundary=${RB}\r\n\r\n--${RB}\r\nContent-Disposition: form-data; name="_method"\r\nContent-Type: text/pl`, `ain; char`, `set=windo`, `ws-1252\r\n\r\nput\r\n`]);
+    await blocked("the halves 12 kB apart in one header", [`POST / HTTP/1.1\r\nHost: t\r\nContent-Type: multipart/form-data; boundary=${RB}\r\n\r\n--${RB}\r\nContent-Disposition: form-data; name="_method"\r\nContent-Type: text/plain; a=`, ...segs(pad(12_000)), `; charset=cp1252\r\n\r\nput\r\n`]);
+    await blocked("6 kB of spaces after the '='", [`POST / HTTP/1.1\r\nHost: t\r\nContent-Type: multipart/form-data; boundary=${RB}\r\n\r\n--${RB}\r\nContent-Disposition: form-data; name="_method"\r\nContent-Type: text/plain; charset=`, ...segs(" ".repeat(6000)), `cp1252\r\n\r\nput\r\n`]);
+    await blocked("after a 20 kB upload on the same connection", [...segs(upload(20_000)), mp("text/plain; charset=iso-8859-1")]);
   });
 
   PORT = PORTS["http/h2c.pfc"];
